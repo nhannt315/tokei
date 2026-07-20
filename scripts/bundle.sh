@@ -14,6 +14,15 @@ cp "$BIN_PATH/Tokei" "$APP/Contents/MacOS/Tokei"
 find "$BIN_PATH" -maxdepth 1 -name '*.bundle' -exec cp -R {} "$APP/Contents/Resources/" \;
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-codesign --force --sign - "$APP"
+
+VERSION="$(git describe --tags --always 2>/dev/null || echo 0.1.0)"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION#v}" "$APP/Contents/Info.plist"
+# Ad-hoc signatures change on every build, which invalidates the Keychain
+# "Always Allow" grant and re-prompts for a password after each rebuild. Use a
+# stable self-signed "Tokei Dev" identity when present (see README), else ad-hoc.
+if [ -z "${CODESIGN_IDENTITY:-}" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q '"Tokei Dev"'; then
+    CODESIGN_IDENTITY="Tokei Dev"
+fi
+codesign --force --sign "${CODESIGN_IDENTITY:--}" "$APP"
 
 echo "Built $APP"

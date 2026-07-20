@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 import TrackerCore
 
 struct UsagePopoverView: View {
@@ -16,7 +17,7 @@ struct UsagePopoverView: View {
         }
         .padding(12)
         .frame(width: 320)
-        .task { await state.refresh() }
+        .task { await state.refresh(userInitiated: true) }
     }
 }
 
@@ -150,16 +151,40 @@ private struct MonthSection: View {
 
 private struct FooterSection: View {
     let state: AppState
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var loginError: String?
+
+    // SMAppService only works from a real installed .app bundle.
+    private var bundled: Bool { Bundle.main.bundleURL.pathExtension == "app" }
 
     var body: some View {
-        HStack {
-            if let stamp = state.lastRefreshed {
-                Text("Updated \(stamp.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            if bundled {
+                Toggle("Launch at Login", isOn: $launchAtLogin)
+                    .font(.callout)
+                    .onChange(of: launchAtLogin) { _, enabled in
+                        do {
+                            if enabled { try SMAppService.mainApp.register() }
+                            else { try SMAppService.mainApp.unregister() }
+                            loginError = nil
+                        } catch {
+                            launchAtLogin = SMAppService.mainApp.status == .enabled
+                            loginError = error.localizedDescription
+                        }
+                    }
+                if let loginError {
+                    Text(loginError).font(.caption).foregroundStyle(.orange)
+                }
             }
-            Spacer()
-            Button("Refresh") { Task { await state.refresh() } }
-            Button("Quit") { NSApplication.shared.terminate(nil) }
+            HStack {
+                if let stamp = state.lastRefreshed {
+                    Text("Updated \(stamp.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Refresh") { Task { await state.refresh(userInitiated: true) } }
+                Button("Quit") { NSApplication.shared.terminate(nil) }
+            }
         }
         .controlSize(.small)
     }

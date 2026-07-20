@@ -30,10 +30,12 @@ public final class UsageStore {
     private let parser = JSONLParser()
     public private(set) var totalSkippedLines = 0
 
+    public static let defaultProjectsDir = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".claude/projects")
+
     public let projectsDir: URL
 
-    public init(projectsDir: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude/projects")) {
+    public init(projectsDir: URL = UsageStore.defaultProjectsDir) {
         self.projectsDir = projectsDir
     }
 

@@ -176,4 +176,71 @@ check(RowBuilder.displayName("claude-opus-4-8") == "opus-4-8", "display name str
 check(RowBuilder.displayName("claude-sonnet-5-20260203") == "sonnet-5", "display name strips date suffix")
 check(RowBuilder.displayName("gpt-4o") == "gpt-4o", "non-claude display name unchanged")
 
+// MARK: - End-to-end pipeline (temp dir → scan → aggregate → dollars)
+
+print("End-to-end pipeline")
+var e2eCal = Calendar(identifier: .gregorian)
+e2eCal.timeZone = TimeZone(identifier: "UTC")!
+let fakeNow = ISO8601DateFormatter().date(from: "2026-07-19T18:00:00Z")!
+
+let tmpDir = FileManager.default.temporaryDirectory
+    .appendingPathComponent("tokei-e2e-\(ProcessInfo.processInfo.processIdentifier)")
+let sessionDir = tmpDir.appendingPathComponent("project-a")
+try FileManager.default.createDirectory(at: sessionDir, withIntermediateDirectories: true)
+defer { try? FileManager.default.removeItem(at: tmpDir) }
+let sessionFile = sessionDir.appendingPathComponent("session.jsonl")
+try Data(parserFixture.utf8).write(to: sessionFile)
+
+let e2eStore = UsageStore(projectsDir: tmpDir)
+let e2eAgg = UsageAggregator(calendar: e2eCal)
+@MainActor
+func e2eRows() -> [ModelCostRow] {
+    e2eStore.scan()
+    var c = CostCalculator(catalog: catalog)
+    return RowBuilder.rows(byModel: e2eAgg.today(e2eStore.events, now: fakeNow), calculator: &c)
+}
+
+// Goldens from the parser fixture through the pricing fixture:
+//   opus msg_a final:  2×5e-6 + 602×2.5e-5 + 20314×5e-7 + 32177×1e-5 = 0.346987
+//   sonnet msg_b:      100×2e-6 + 50×1e-5 + 5×2e-7 + 10×2.5e-6       = 0.000726
+let firstScan = e2eRows()
+check(firstScan.count == 2, "e2e scan yields 2 priced model rows")
+check(firstScan[0].model == "claude-opus-4-8" && firstScan[0].cost == Decimal(string: "0.346987")!,
+      "e2e opus golden dollars (dedupe kept final record)")
+check(firstScan[1].cost == Decimal(string: "0.000726")!, "e2e sonnet golden dollars")
+
+// Append a new event → incremental rescan picks up only the delta.
+let appended = """
+{"type":"assistant","timestamp":"2026-07-19T17:00:00.000Z","message":{"id":"msg_d","model":"claude-opus-4-8","usage":{"input_tokens":0,"output_tokens":1000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}
+
+"""
+let handle = try FileHandle(forWritingTo: sessionFile)
+try handle.seekToEnd()
+try handle.write(contentsOf: Data(appended.utf8))
+try handle.close()
+
+let secondScan = e2eRows()
+check(secondScan[0].cost == Decimal(string: "0.346987")! + Decimal(1000) * Decimal(string: "2.5e-05")!,
+      "e2e appended line adds exactly 1000 output tokens of opus cost")
+
+// MARK: - DirectoryWatcher (burst of writes → one debounced callback)
+
+print("DirectoryWatcher")
+let watchDir = tmpDir.appendingPathComponent("watched")
+try FileManager.default.createDirectory(at: watchDir, withIntermediateDirectories: true)
+let counter = DispatchQueue(label: "e2e.counter")
+nonisolated(unsafe) var fires = 0
+let fired = DispatchSemaphore(value: 0)
+let watcher = DirectoryWatcher(directory: watchDir, debounce: 0.5) {
+    counter.sync { fires += 1 }
+    fired.signal()
+}
+for i in 0..<3 {
+    try Data("x".utf8).write(to: watchDir.appendingPathComponent("f\(i).jsonl"))
+}
+check(fired.wait(timeout: .now() + 10) == .success, "watcher fires within 10s of a write burst")
+Thread.sleep(forTimeInterval: 1.5)   // any un-debounced extra callbacks would land here
+check(counter.sync { fires } == 1, "burst of 3 writes debounced into exactly 1 callback")
+_ = watcher
+
 print("\nall \(checksRun) checks passed")
