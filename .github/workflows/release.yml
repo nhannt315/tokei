@@ -14,8 +14,64 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # bundle.sh stamps the version from `git describe --tags`
+      - name: Import signing certificate
+        # Signing with a stable certificate keeps each user's Keychain
+        # "Always Allow" grant valid across OTA updates; an ad-hoc build would
+        # silently invalidate it. The key lives in a job-scoped keychain that
+        # is destroyed with the runner.
+        env:
+          CERT_P12: ${{ secrets.SIGNING_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CERT_P12:-}" ]; then
+            echo "error: SIGNING_CERT_P12 secret is not set." >&2
+            echo "       Releases must be certificate-signed — see README." >&2
+            exit 1
+          fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 900 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          rm -f "$RUNNER_TEMP/cert.p12"
+          # Let codesign use the key without an interactive prompt.
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          # Prepend to the search list, keeping the existing keychains.
+          OLD_KEYCHAINS="$(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"$//')"
+          # shellcheck disable=SC2086
+          security list-keychains -d user -s "$KEYCHAIN" $OLD_KEYCHAINS
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
+            | awk -F'"' 'NR==1 && NF>1 {print $2}')"
+          if [ -z "$IDENTITY" ]; then
+            echo "error: no codesigning identity found in the imported certificate." >&2
+            exit 1
+          fi
+          echo "CODESIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "Imported signing identity: $IDENTITY"
+
       - name: Build app bundle
+        env:
+          # Fail the release rather than silently shipping an ad-hoc build.
+          REQUIRE_SIGNING_IDENTITY: "1"
         run: ./scripts/bundle.sh
+      - name: Verify signature is certificate-based
+        # A cdhash-only designated requirement means the build went out ad-hoc
+        # and would break every user's Keychain grant on update.
+        run: |
+          set -euo pipefail
+          REQ="$(codesign -d -r- dist/Tokei.app 2>&1 | grep '^# designated' || true)"
+          echo "$REQ"
+          if echo "$REQ" | grep -q 'cdhash'; then
+            echo "error: bundle is ad-hoc signed (cdhash requirement)." >&2
+            exit 1
+          fi
+          codesign --verify --strict --deep dist/Tokei.app
+
       - name: Package dmg
         run: |
           mkdir dmg-root

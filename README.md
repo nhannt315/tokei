@@ -44,11 +44,37 @@ If `~/.local/bin` isn't on your `PATH`, either add it in your shell profile or s
 
 On first launch macOS asks to allow access to the "Claude Code-credentials" Keychain item. That is the OAuth token Claude Code itself stores; Tokei reads it (read-only) solely to query your quota. Click **Always Allow** to avoid repeat prompts. If you deny it, cost tracking still works — only the quota bars are unavailable, and Tokei won't ask again until you open the popover or hit Refresh.
 
-**Make "Always Allow" survive rebuilds.** By default the app is ad-hoc signed, and macOS ties the Keychain grant to the exact binary — every rebuild re-prompts for your password. To fix this once, create a stable self-signed code-signing certificate named `Tokei Dev`:
+**Make "Always Allow" survive rebuilds and updates.** macOS binds the grant to the app's *designated requirement*. For an ad-hoc signed build that requirement is the binary's own hash:
+
+```
+# designated => cdhash H"dcd81e40641705922bec1d262964b02d68fdf609"
+```
+
+Every rebuild produces a different hash, so the grant no longer matches and macOS asks for your password again. Signing with a certificate changes the requirement to name the *certificate* instead, which is stable across rebuilds and OTA updates. Create one once:
 
 1. Keychain Access → Certificate Assistant → Create a Certificate…
 2. Name: `Tokei Dev`, Identity Type: Self-Signed Root, Certificate Type: **Code Signing**
-3. Rebuild (`./scripts/bundle.sh` picks it up automatically). Approve the Keychain prompt one last time with **Always Allow** — it now sticks across rebuilds.
+3. Rebuild (`./scripts/bundle.sh` picks it up automatically). Approve the Keychain prompt one last time with **Always Allow** — it now sticks.
+
+`bundle.sh` prints the identity and designated requirement it produced; if you see a `cdhash` requirement, the build is still ad-hoc and will keep prompting.
+
+### Signing releases in CI
+
+In-app updates are signed builds too, so CI must use the *same* certificate — an ad-hoc release would invalidate the grant for everyone who installs it. The release workflow fails rather than shipping an unsigned build.
+
+Export the identity and add it to the repository secrets:
+
+```sh
+# Keychain Access → right-click "Tokei Dev" → Export… → .p12 (set a password)
+base64 -i Tokei-Dev.p12 | pbcopy   # paste as SIGNING_CERT_P12
+```
+
+| Secret | Value |
+|---|---|
+| `SIGNING_CERT_P12` | base64 of the exported `.p12` |
+| `SIGNING_CERT_PASSWORD` | the password set during export |
+
+The workflow imports it into a temporary keychain that is discarded with the runner. Treat the `.p12` as a private key: anyone who can read those secrets can sign software as you. Rotate it by creating a new certificate and replacing both secrets — users then approve the Keychain prompt once more, since the requirement changed.
 
 ## Troubleshooting
 

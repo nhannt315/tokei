@@ -25,13 +25,34 @@ cmp -s "$BIN_PATH/TrackerCLI" "$APP/Contents/MacOS/tokei-cli" || { echo "bundle 
 
 VERSION="$(git describe --tags --always 2>/dev/null || echo 0.1.0)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION#v}" "$APP/Contents/Info.plist"
-# Ad-hoc signatures change on every build, which invalidates the Keychain
-# "Always Allow" grant and re-prompts for a password after each rebuild. Use a
-# stable self-signed "Tokei Dev" identity when present (see README), else ad-hoc.
+# An ad-hoc signature's designated requirement is the binary's own cdhash, so
+# it changes on every rebuild. macOS binds the Keychain "Always Allow" grant to
+# that requirement, hence the password prompt after each build. Signing with a
+# certificate makes the requirement name the *certificate* instead, so the
+# grant survives rebuilds and OTA updates. See README for creating "Tokei Dev".
 if [ -z "${CODESIGN_IDENTITY:-}" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q '"Tokei Dev"'; then
     CODESIGN_IDENTITY="Tokei Dev"
 fi
+
+# Release builds must never silently fall back to ad-hoc: shipping an ad-hoc
+# update would break every user's Keychain grant, and the only symptom is a
+# password prompt long after the release went out.
+if [ -z "${CODESIGN_IDENTITY:-}" ]; then
+    if [ -n "${REQUIRE_SIGNING_IDENTITY:-}" ]; then
+        echo "error: REQUIRE_SIGNING_IDENTITY is set but no signing identity was found." >&2
+        echo "       Set CODESIGN_IDENTITY or import the signing certificate first." >&2
+        exit 1
+    fi
+    echo "warning: no signing identity found — building ad-hoc." >&2
+    echo "         macOS will re-prompt for Keychain access after each rebuild." >&2
+    echo "         Create a 'Tokei Dev' certificate to stop this (see README)." >&2
+fi
+
 codesign --force --sign "${CODESIGN_IDENTITY:--}" "$APP/Contents/MacOS/tokei-cli"
 codesign --force --sign "${CODESIGN_IDENTITY:--}" "$APP"
 
+# The designated requirement is what the Keychain grant is matched against.
+# Print it so a build that would invalidate the grant is obvious immediately.
 echo "Built $APP"
+echo "  identity: ${CODESIGN_IDENTITY:-ad-hoc}"
+echo "  $(codesign -d -r- "$APP" 2>&1 | grep '^# designated' || echo 'designated requirement unavailable')"
