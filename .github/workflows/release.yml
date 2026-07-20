@@ -17,7 +17,11 @@ jobs:
       - name: Build app bundle
         run: ./scripts/bundle.sh
       - name: Package dmg
-        run: hdiutil create -volname Tokei -srcfolder dist/Tokei.app -ov -format UDZO "Tokei-${{ github.ref_name }}.dmg"
+        run: |
+          mkdir dmg-root
+          cp -R dist/Tokei.app dmg-root/
+          ln -s /Applications dmg-root/Applications
+          hdiutil create -volname Tokei -srcfolder dmg-root -ov -format UDZO "Tokei-${{ github.ref_name }}.dmg"
       - name: Create GitHub release
         run: gh release create "${{ github.ref_name }}" Tokei-*.dmg --generate-notes
         env:
