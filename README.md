@@ -18,6 +18,15 @@ cp -R dist/Tokei.app /Applications/
 open /Applications/Tokei.app
 ```
 
+## CLI
+
+The app bundle ships with a CLI over the same core. Put it on your PATH:
+
+```sh
+ln -s /Applications/Tokei.app/Contents/MacOS/tokei /usr/local/bin/tokei
+tokei today    # also: month | daily | quota | scan
+```
+
 ## How it works
 
 - **Usage/cost**: parses `~/.claude/projects/**/*.jsonl` transcripts locally. Streaming placeholder records are deduped by message id; rescans are incremental (per-file offsets), so refreshes are cheap. Pricing comes from LiteLLM's model price catalog, with a bundled snapshot as offline fallback.

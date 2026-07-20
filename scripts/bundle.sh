@@ -3,12 +3,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 swift build -c release --product Tokei
+swift build -c release --product TrackerCLI
 
 APP="dist/Tokei.app"
 rm -rf dist
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 BIN_PATH="$(swift build -c release --show-bin-path)"
 cp "$BIN_PATH/Tokei" "$APP/Contents/MacOS/Tokei"
+# CLI ships inside the bundle; users symlink it onto PATH (see README)
+cp "$BIN_PATH/TrackerCLI" "$APP/Contents/MacOS/tokei"
 # SPM resource bundles (bundled pricing snapshot) must live next to Resources
 # where Bundle.module looks for them in an app bundle.
 find "$BIN_PATH" -maxdepth 1 -name '*.bundle' -exec cp -R {} "$APP/Contents/Resources/" \;
@@ -23,6 +26,7 @@ VERSION="$(git describe --tags --always 2>/dev/null || echo 0.1.0)"
 if [ -z "${CODESIGN_IDENTITY:-}" ] && security find-identity -v -p codesigning 2>/dev/null | grep -q '"Tokei Dev"'; then
     CODESIGN_IDENTITY="Tokei Dev"
 fi
+codesign --force --sign "${CODESIGN_IDENTITY:--}" "$APP/Contents/MacOS/tokei"
 codesign --force --sign "${CODESIGN_IDENTITY:--}" "$APP"
 
 echo "Built $APP"
