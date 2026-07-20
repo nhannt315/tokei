@@ -1,0 +1,24 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # bundle.sh stamps the version from `git describe --tags`
+      - name: Build app bundle
+        run: ./scripts/bundle.sh
+      - name: Package dmg
+        run: hdiutil create -volname Tokei -srcfolder dist/Tokei.app -ov -format UDZO "Tokei-${{ github.ref_name }}.dmg"
+      - name: Create GitHub release
+        run: gh release create "${{ github.ref_name }}" Tokei-*.dmg --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
