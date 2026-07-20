@@ -1,5 +1,9 @@
 # Tokei
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-donate-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/mrx315)
+
+*Tokei* (時計) is Japanese for "clock" — and it doubles as **to**ken + **kei** (計, "meter/gauge"). A clock for your tokens, sitting in the menu bar.
+
 macOS menu bar app that tracks your Claude Code usage: today's and this month's token cost per model (from local transcripts) and your remaining 5-hour / weekly quota (from Anthropic's usage endpoint).
 
 The menu bar shows remaining session quota (e.g. `82%`); the popover shows quota bars with reset times, per-model cost for today and this month, and a Launch at Login toggle.
@@ -56,6 +60,10 @@ On first launch macOS asks to allow access to the "Claude Code-credentials" Keyc
 | Quota bars stale / "Offline" | Network issue; history is local and stays intact. Last good snapshot is shown with its timestamp. |
 | Launch at Login toggle missing | Only shown when running from an installed `.app` bundle (macOS requirement), not via `swift run`. |
 | Costs look off | Compare with `npx ccusage@latest daily`; both read the same JSONL files. |
+
+## Support
+
+If Tokei is useful to you, you can support development on [Buy Me a Coffee](https://buymeacoffee.com/mrx315). Entirely voluntary — everything here is free and open source.
 
 ## Development
 
