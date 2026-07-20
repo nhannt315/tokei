@@ -23,9 +23,12 @@ open /Applications/Tokei.app
 The app bundle ships with a CLI over the same core. Put it on your PATH:
 
 ```sh
-ln -s /Applications/Tokei.app/Contents/MacOS/tokei-cli /usr/local/bin/tokei
+mkdir -p ~/.local/bin
+ln -sf /Applications/Tokei.app/Contents/MacOS/tokei-cli ~/.local/bin/tokei
 tokei today    # also: month | daily | quota | scan
 ```
+
+If `~/.local/bin` isn't on your `PATH`, either add it in your shell profile or symlink into `/usr/local/bin` instead (needs `sudo`).
 
 ## How it works
 
