@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import TrackerCore
@@ -71,16 +72,35 @@ actor UsageEngine {
     }
 }
 
+/// Update lifecycle as the popover sees it.
+enum UpdateStatus: Equatable {
+    case idle
+    case available(AvailableUpdate)
+    case installing
+    case failed(String)
+}
+
 @Observable @MainActor
 final class AppState {
     var quota: QuotaState?                  // nil until the first fetch lands
     var lastSnapshot: QuotaSnapshot?        // retained across network errors
     var usage = UsageEngine.Computed()
     var lastRefreshed: Date?
+    var updateStatus: UpdateStatus = .idle
 
     private let engine = UsageEngine()
     private var polling = false
     private var watcher: DirectoryWatcher?
+    private var lastUpdateCheck: Date?
+
+    /// Version stamped into the bundle by scripts/bundle.sh.
+    static var currentVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+    }
+
+    /// Running from an installed .app (vs `swift run`) — self-update only makes
+    /// sense for the former.
+    private var bundled: Bool { Bundle.main.bundleURL.pathExtension == "app" }
 
     init() {
         Task {
@@ -113,6 +133,45 @@ final class AppState {
         lastRefreshed = Date()
     }
 
+    /// Poll GitHub for a newer release, at most every 6 hours. Silent on
+    /// failure — a missed check is not worth a UI error; the next one retries.
+    func checkForUpdate(force: Bool = false) async {
+        guard bundled else { return }
+        if case .installing = updateStatus { return }
+        if !force, let last = lastUpdateCheck, Date().timeIntervalSince(last) < 6 * 3600 { return }
+        lastUpdateCheck = Date()
+
+        if case .success(let update) = await UpdateChecker().check(currentVersion: Self.currentVersion) {
+            if let update { updateStatus = .available(update) }
+        }
+    }
+
+    /// Download, verify, then hand off to the detached swap script and quit —
+    /// the script relaunches the new build once this process is gone.
+    func installUpdate(_ update: AvailableUpdate) async {
+        updateStatus = .installing
+        let installer = UpdateInstaller()
+        do {
+            let staged = try await installer.stage(update)
+            try installer.installOnExit(staged: staged, installedAt: Bundle.main.bundleURL)
+            NSApplication.shared.terminate(nil)
+        } catch {
+            updateStatus = .failed(Self.describe(error))
+        }
+    }
+
+    private static func describe(_ error: Error) -> String {
+        switch error {
+        case UpdateInstaller.InstallError.download(let m): return "Download failed: \(m)"
+        case UpdateInstaller.InstallError.unpack(let m): return "Unpack failed: \(m)"
+        case UpdateInstaller.InstallError.noBundleInArchive: return "No app found in the download."
+        case UpdateInstaller.InstallError.identifierMismatch: return "Downloaded app is not Tokei."
+        case UpdateInstaller.InstallError.notInstalled(let p): return "Not installed at \(p)."
+        case UpdateInstaller.InstallError.swapFailed(let m): return "Install failed: \(m)"
+        default: return error.localizedDescription
+        }
+    }
+
     /// Background cadence: every 5 minutes. Opening the popover triggers an
     /// immediate refresh (see UsagePopoverView.onAppear), which stands in for
     /// the planned 60s-while-open interval.
@@ -121,6 +180,7 @@ final class AppState {
         polling = true
         while !Task.isCancelled {
             await refresh()
+            await checkForUpdate()   // self-throttled to every 6h
             try? await Task.sleep(for: .seconds(300))
         }
     }

@@ -13,6 +13,7 @@ struct UsagePopoverView: View {
             Divider()
             MonthSection(usage: state.usage)
             Divider()
+            UpdateSection(state: state)
             FooterSection(state: state)
         }
         .padding(12)
@@ -142,6 +143,42 @@ private struct MonthSection: View {
                     Text(costString(row.cost)).monospacedDigit()
                 }
                 .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - Update
+
+/// Renders nothing in the common case (no update, running current). Only
+/// speaks up when there is something to install or a failure to report.
+private struct UpdateSection: View {
+    let state: AppState
+
+    var body: some View {
+        switch state.updateStatus {
+        case .idle:
+            EmptyView()
+        case .available(let update):
+            HStack {
+                Label("Version \(update.version) available", systemImage: "arrow.down.circle")
+                    .font(.callout)
+                Spacer()
+                Button("Update") { Task { await state.installUpdate(update) } }
+            }
+            .controlSize(.small)
+        case .installing:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Downloading update…").font(.callout).foregroundStyle(.secondary)
+            }
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 2) {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.orange)
+                Link("Download manually",
+                     destination: URL(string: "https://github.com/nhannt315/tokei/releases/latest")!)
+                    .font(.caption)
             }
         }
     }

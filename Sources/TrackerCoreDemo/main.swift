@@ -143,6 +143,42 @@ check(fb.bucket("seven_day")!.resetsAt != nil, "plain ISO8601 resets_at parsed")
 check(QuotaClient.decode(Data("{}".utf8), fetchedAt: Date()) == nil, "empty response → nil, not a crash")
 check(QuotaClient.decode(Data("not json".utf8), fetchedAt: Date()) == nil, "garbage response → nil")
 
+// MARK: - UpdateChecker
+
+print("UpdateChecker")
+check(UpdateChecker.normalize("v0.1.2") == "0.1.2", "leading v stripped")
+check(UpdateChecker.normalize("0.1.2-3-gabc123") == "0.1.2", "git describe suffix stripped")
+check(UpdateChecker.isNewer("v0.1.3", than: "0.1.2"), "patch bump is newer")
+check(UpdateChecker.isNewer("0.1.10", than: "0.1.9"), "0.1.10 > 0.1.9 (numeric, not string, compare)")
+check(!UpdateChecker.isNewer("0.1.2", than: "0.1.2"), "same version is not newer")
+check(!UpdateChecker.isNewer("0.1.2", than: "0.2.0"), "older release is not newer")
+check(!UpdateChecker.isNewer("0.1.2", than: "0.1.2-5-gdeadbee"), "dev build of same tag: no update offered")
+check(UpdateChecker.isNewer("1.0", than: "0.9.9"), "shorter version compares by component")
+check(!UpdateChecker.isNewer("1.2", than: "1.2.0"), "missing components count as zero")
+check(!UpdateChecker.isNewer("garbage", than: "0.1.2"), "unparseable tag never offers an update")
+
+let releaseFixture = """
+{"tag_name":"v0.2.0","draft":false,"prerelease":false,
+ "html_url":"https://github.com/nhannt315/tokei/releases/tag/v0.2.0",
+ "assets":[{"name":"Tokei-v0.2.0.dmg","browser_download_url":"https://example.com/a.dmg"},
+           {"name":"Tokei-v0.2.0.zip","browser_download_url":"https://example.com/a.zip"}]}
+"""
+let release = UpdateChecker.decode(Data(releaseFixture.utf8))!
+check(release.version == "0.2.0", "release tag normalized")
+check(release.downloadURL.absoluteString == "https://example.com/a.zip", "picks the zip asset, not the dmg")
+
+let prereleaseFixture = """
+{"tag_name":"v0.3.0","prerelease":true,
+ "assets":[{"name":"Tokei.zip","browser_download_url":"https://example.com/b.zip"}]}
+"""
+check(UpdateChecker.decode(Data(prereleaseFixture.utf8)) == nil, "prereleases ignored")
+let dmgOnlyFixture = """
+{"tag_name":"v0.2.0","assets":[{"name":"Tokei.dmg","browser_download_url":"https://example.com/a.dmg"}]}
+"""
+check(UpdateChecker.decode(Data(dmgOnlyFixture.utf8)) == nil, "no zip asset → no update")
+check(UpdateChecker.decode(Data("{}".utf8)) == nil, "empty payload → nil, not a crash")
+check(UpdateChecker.decode(Data("not json".utf8)) == nil, "garbage payload → nil")
+
 // MARK: - RowBuilder
 
 print("RowBuilder")

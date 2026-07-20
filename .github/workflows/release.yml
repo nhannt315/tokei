@@ -22,7 +22,11 @@ jobs:
           cp -R dist/Tokei.app dmg-root/
           ln -s /Applications dmg-root/Applications
           hdiutil create -volname Tokei -srcfolder dmg-root -ov -format UDZO "Tokei-${{ github.ref_name }}.dmg"
+      - name: Package zip
+        # The in-app updater downloads this, not the dmg: no hdiutil mount
+        # needed and ditto preserves the bundle's code signature.
+        run: ditto -c -k --sequesterRsrc --keepParent dist/Tokei.app "Tokei-${{ github.ref_name }}.zip"
       - name: Create GitHub release
-        run: gh release create "${{ github.ref_name }}" Tokei-*.dmg --generate-notes
+        run: gh release create "${{ github.ref_name }}" Tokei-*.dmg Tokei-*.zip --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
