@@ -62,6 +62,8 @@ Every rebuild produces a different hash, so the grant no longer matches and macO
 
 In-app updates are signed builds too, so CI must use the *same* certificate — an ad-hoc release would invalidate the grant for everyone who installs it. The release workflow fails rather than shipping an unsigned build.
 
+> Maintainers: see [`docs/releases-and-signing.md`](docs/releases-and-signing.md) for cert lifecycle, secret rotation, and troubleshooting.
+
 Export the identity and add it to the repository secrets:
 
 ```sh
