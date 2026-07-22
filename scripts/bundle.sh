@@ -55,4 +55,4 @@ codesign --force --sign "${CODESIGN_IDENTITY:--}" "$APP"
 # Print it so a build that would invalidate the grant is obvious immediately.
 echo "Built $APP"
 echo "  identity: ${CODESIGN_IDENTITY:-ad-hoc}"
-echo "  $(codesign -d -r- "$APP" 2>&1 | grep '^# designated' || echo 'designated requirement unavailable')"
+echo "  $(codesign -d -r- "$APP" 2>&1 | grep 'designated =>' || echo 'designated requirement unavailable')"

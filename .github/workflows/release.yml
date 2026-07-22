@@ -45,14 +45,26 @@ jobs:
           OLD_KEYCHAINS="$(security list-keychains -d user | sed -e 's/^[[:space:]]*"//' -e 's/"$//')"
           # shellcheck disable=SC2086
           security list-keychains -d user -s "$KEYCHAIN" $OLD_KEYCHAINS
-          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
-            | awk -F'"' 'NR==1 && NF>1 {print $2}')"
+          # Select by the certificate's SHA-1 hash, not `find-identity`: a
+          # self-signed cert fails the codesigning *policy* check (so
+          # find-identity -p codesigning lists nothing) yet codesign signs with
+          # it fine. The hash is read straight from the cert, policy-independent.
+          IDENTITY="$(security find-certificate -a -c "Tokei Dev" -Z "$KEYCHAIN" \
+            | awk '/SHA-1 hash:/ {print $3; exit}')"
           if [ -z "$IDENTITY" ]; then
-            echo "error: no codesigning identity found in the imported certificate." >&2
+            echo "error: 'Tokei Dev' certificate not found in the imported keychain." >&2
             exit 1
           fi
+          # Prove the identity actually signs before trusting the release to it.
+          PROBE="$RUNNER_TEMP/sigprobe"
+          printf '#!/bin/sh\n' > "$PROBE"; chmod +x "$PROBE"
+          if ! codesign --force --sign "$IDENTITY" --keychain "$KEYCHAIN" "$PROBE"; then
+            echo "error: imported certificate cannot sign." >&2
+            exit 1
+          fi
+          rm -f "$PROBE"
           echo "CODESIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
-          echo "Imported signing identity: $IDENTITY"
+          echo "Imported signing identity (SHA-1): $IDENTITY"
 
       - name: Build app bundle
         env:
@@ -64,7 +76,7 @@ jobs:
         # and would break every user's Keychain grant on update.
         run: |
           set -euo pipefail
-          REQ="$(codesign -d -r- dist/Tokei.app 2>&1 | grep '^# designated' || true)"
+          REQ="$(codesign -d -r- dist/Tokei.app 2>&1 | grep 'designated =>' || true)"
           echo "$REQ"
           if echo "$REQ" | grep -q 'cdhash'; then
             echo "error: bundle is ad-hoc signed (cdhash requirement)." >&2
