@@ -143,6 +143,39 @@ check(fb.bucket("seven_day")!.resetsAt != nil, "plain ISO8601 resets_at parsed")
 check(QuotaClient.decode(Data("{}".utf8), fetchedAt: Date()) == nil, "empty response → nil, not a crash")
 check(QuotaClient.decode(Data("not json".utf8), fetchedAt: Date()) == nil, "garbage response → nil")
 
+// MARK: - KeychainCredentialReader (pure exit-code / parse logic; no live Keychain)
+
+print("KeychainCredentialReader")
+// The stored blob is JSON; extract claudeAiOauth.accessToken.
+check(KeychainCredentialReader.parseToken(
+        from: Data(#"{"claudeAiOauth":{"accessToken":"abc"}}"#.utf8)) == "abc",
+      "parses accessToken from the stored JSON blob")
+check(KeychainCredentialReader.parseToken(
+        from: Data(#"{"claudeAiOauth":{"accessToken":""}}"#.utf8)) == nil,
+      "empty accessToken → nil (treated as not signed in)")
+check(KeychainCredentialReader.parseToken(from: Data(#"{"other":1}"#.utf8)) == nil,
+      "wrong shape → nil")
+check(KeychainCredentialReader.parseToken(from: Data("not json".utf8)) == nil,
+      "garbage blob → nil, not a crash")
+
+// `security` exits with the low byte of the OSStatus (verified against the live
+// tool): errSecItemNotFound -25300 & 0xFF = 44, errSecAuthFailed = 51,
+// errSecUserCanceled = 128.
+func isNotFound(_ r: KeychainCredentialReader.ReadResult) -> Bool {
+    if case .notFound = r { return true }; return false
+}
+func isDenied(_ r: KeychainCredentialReader.ReadResult) -> Bool {
+    if case .denied = r { return true }; return false
+}
+func failureStatus(_ r: KeychainCredentialReader.ReadResult) -> OSStatus? {
+    if case .failure(let s) = r { return s }; return nil
+}
+check(isNotFound(KeychainCredentialReader.classify(exitCode: 44)), "exit 44 → notFound")
+check(isDenied(KeychainCredentialReader.classify(exitCode: 51)), "exit 51 (auth failed) → denied")
+check(isDenied(KeychainCredentialReader.classify(exitCode: 128)), "exit 128 (user cancel) → denied")
+check(failureStatus(KeychainCredentialReader.classify(exitCode: 2)) == 2,
+      "other non-zero exit → failure carrying that code")
+
 // MARK: - UpdateChecker
 
 print("UpdateChecker")
