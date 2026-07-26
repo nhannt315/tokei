@@ -66,7 +66,7 @@ Tokei reads the token through `/usr/bin/security` (a stable Apple binary) so the
 
 Releases are **ad-hoc signed** — Tokei has no Apple Developer ID (that needs a paid account). Ad-hoc builds run on any Mac after a one-time [Open Anyway](#from-a-release-dmg); the release workflow verifies the build is ad-hoc (portable) and not accidentally tied to a local certificate.
 
-> Notarization (the proper fix — no Open Anyway, works everywhere silently) is planned for when a Developer ID is available: see [`plans/260724-notarization/plan.md`](plans/260724-notarization/plan.md). Maintenance details are in [`docs/releases-and-signing.md`](docs/releases-and-signing.md).
+> Notarization (the proper fix — no Open Anyway, works everywhere silently) is planned for when an Apple Developer ID is available. Signing and release maintenance details are in [`docs/releases-and-signing.md`](docs/releases-and-signing.md).
 
 ## Troubleshooting
 

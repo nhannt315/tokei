@@ -14,7 +14,7 @@ touching `release.yml`, `scripts/bundle.sh`, the signing certificate, or the
 > Privacy & Security → Open Anyway** (quarantined `.dmg` installs only; OTA
 > updates aren't quarantined and need no action). CI now signs ad-hoc and
 > verifies the build is *not* cert-locked. The real fix — Apple notarization —
-> is deferred on budget: see `plans/260724-notarization/plan.md`. Everything
+> is deferred on budget (local plan: `plans/260724-notarization/`). Everything
 > below still documents the mechanics; just read "cert" as the opt-in/local and
 > future-Developer-ID path, not today's release path.
 
