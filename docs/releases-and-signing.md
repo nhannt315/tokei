@@ -4,6 +4,20 @@ How Tokei ships builds, signs them, and updates itself. Read this before
 touching `release.yml`, `scripts/bundle.sh`, the signing certificate, or the
 `UpdateChecker` / `UpdateInstaller` code.
 
+> **Current signing state (2026-07-26): ad-hoc, local + CI.** The cert-based
+> sections below (`Tokei Dev`, `SIGNING_CERT_*` secrets) are **not** the active
+> release path — they are kept for local dev (`USE_LOCAL_CERT=1`) and as history.
+> Why the change: a self-signed cert names a `certificate leaf` in the
+> designated requirement that only the author's Mac has, so on any *other* Mac
+> `amfid` refuses to launch it (`error 162`). Ad-hoc's `cdhash` requirement is
+> self-contained and launches anywhere after a one-time **System Settings →
+> Privacy & Security → Open Anyway** (quarantined `.dmg` installs only; OTA
+> updates aren't quarantined and need no action). CI now signs ad-hoc and
+> verifies the build is *not* cert-locked. The real fix — Apple notarization —
+> is deferred on budget: see `plans/260724-notarization/plan.md`. Everything
+> below still documents the mechanics; just read "cert" as the opt-in/local and
+> future-Developer-ID path, not today's release path.
+
 ## The core problem this solves
 
 Tokei reads the Claude Code OAuth token from the Keychain to show quota. macOS

@@ -16,6 +16,20 @@ The menu bar shows remaining session quota (e.g. `82%`); the popover shows quota
 
 ## Install
 
+### From a release (.dmg)
+
+Download the latest `Tokei-*.dmg` from [Releases](https://github.com/nhannt315/tokei/releases), open it, and drag Tokei to Applications.
+
+Tokei isn't signed with an Apple Developer ID (that needs a paid account), so on first launch macOS says it "cannot be opened because Apple cannot check it for malicious software." To allow it:
+
+1. Try to open Tokei once (the warning appears).
+2. **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to the Tokei message.
+3. Confirm. Tokei launches and won't ask again.
+
+You only do this once per install. In-app updates download and launch on their own — no repeat of this step.
+
+### From source
+
 ```sh
 ./scripts/bundle.sh
 cp -R dist/Tokei.app /Applications/
@@ -44,39 +58,15 @@ If `~/.local/bin` isn't on your `PATH`, either add it in your shell profile or s
 
 On first launch macOS asks to allow access to the "Claude Code-credentials" Keychain item. That is the OAuth token Claude Code itself stores; Tokei reads it (read-only) solely to query your quota. Click **Always Allow** to avoid repeat prompts. If you deny it, cost tracking still works — only the quota bars are unavailable, and Tokei won't ask again until you open the popover or hit Refresh.
 
-**Make "Always Allow" survive rebuilds and updates.** macOS binds the grant to the app's *designated requirement*. For an ad-hoc signed build that requirement is the binary's own hash:
+Tokei reads the token through `/usr/bin/security` (a stable Apple binary) so the grant binds to it rather than to Tokei's own signature, which keeps re-prompts rare. Because releases are ad-hoc signed (no Apple Developer ID yet), the grant isn't perfectly stable across updates — but it won't spam you: a denied or timed-out read backs off until you next open the popover.
 
-```
-# designated => cdhash H"dcd81e40641705922bec1d262964b02d68fdf609"
-```
+**Optional (local dev only): a stable grant via a self-signed cert.** If you build locally a lot and want the grant to stick perfectly, create a `Tokei Dev` code-signing certificate (Keychain Access → Certificate Assistant → Create a Certificate → Self-Signed Root, type **Code Signing**), then build with `USE_LOCAL_CERT=1 ./scripts/bundle.sh`. Do **not** use this for anything you distribute: a self-signed cert makes the app fail to launch on other Macs (`amfid` "error 162"). It's purely a local convenience.
 
-Every rebuild produces a different hash, so the grant no longer matches and macOS asks for your password again. Signing with a certificate changes the requirement to name the *certificate* instead, which is stable across rebuilds and OTA updates. Create one once:
+### Signing releases
 
-1. Keychain Access → Certificate Assistant → Create a Certificate…
-2. Name: `Tokei Dev`, Identity Type: Self-Signed Root, Certificate Type: **Code Signing**
-3. Rebuild (`./scripts/bundle.sh` picks it up automatically). Approve the Keychain prompt one last time with **Always Allow** — it now sticks.
+Releases are **ad-hoc signed** — Tokei has no Apple Developer ID (that needs a paid account). Ad-hoc builds run on any Mac after a one-time [Open Anyway](#from-a-release-dmg); the release workflow verifies the build is ad-hoc (portable) and not accidentally tied to a local certificate.
 
-`bundle.sh` prints the identity and designated requirement it produced; if you see a `cdhash` requirement, the build is still ad-hoc and will keep prompting.
-
-### Signing releases in CI
-
-In-app updates are signed builds too, so CI must use the *same* certificate — an ad-hoc release would invalidate the grant for everyone who installs it. The release workflow fails rather than shipping an unsigned build.
-
-> Maintainers: see [`docs/releases-and-signing.md`](docs/releases-and-signing.md) for cert lifecycle, secret rotation, and troubleshooting.
-
-Export the identity and add it to the repository secrets:
-
-```sh
-# Keychain Access → right-click "Tokei Dev" → Export… → .p12 (set a password)
-base64 -i Tokei-Dev.p12 | pbcopy   # paste as SIGNING_CERT_P12
-```
-
-| Secret | Value |
-|---|---|
-| `SIGNING_CERT_P12` | base64 of the exported `.p12` |
-| `SIGNING_CERT_PASSWORD` | the password set during export |
-
-The workflow imports it into a temporary keychain that is discarded with the runner. Treat the `.p12` as a private key: anyone who can read those secrets can sign software as you. Rotate it by creating a new certificate and replacing both secrets — users then approve the Keychain prompt once more, since the requirement changed.
+> Notarization (the proper fix — no Open Anyway, works everywhere silently) is planned for when a Developer ID is available: see [`plans/260724-notarization/plan.md`](plans/260724-notarization/plan.md). Maintenance details are in [`docs/releases-and-signing.md`](docs/releases-and-signing.md).
 
 ## Troubleshooting
 
