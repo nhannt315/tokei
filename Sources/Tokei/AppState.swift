@@ -10,13 +10,36 @@ actor UsageEngine {
     private let pricingService = PricingService()
     private var catalog: PricingCatalog?
 
+    struct DayPoint: Sendable, Identifiable {
+        let day: Date
+        let tokens: Int
+        var id: Date { day }
+    }
+    struct WeekPoint: Sendable, Identifiable {
+        let weekStart: Date
+        let tokens: Int
+        let cost: Decimal
+        var id: Date { weekStart }
+    }
+
     struct Computed: Sendable {
         var todayRows: [ModelCostRow] = []
         var todayTotal: Decimal = 0
+        var todayProjects: [ProjectCostRow] = []
         var monthRows: [ModelCostRow] = []
         var monthTotal: Decimal = 0
+        var monthProjects: [ProjectCostRow] = []
         var unpricedModels: Set<String> = []
         var eventCount = 0
+
+        // Analytics
+        var daysThisWeek: [DayPoint] = []      // tokens/day, current calendar week (7 points)
+        var weeks: [WeekPoint] = []            // last 8 weeks, tokens + cost
+
+        // Session window (for burn rate), keyed off local events; the projected
+        // exhaustion time comes from the quota bucket, not from these tokens.
+        var sessionTokens: Int = 0
+        var sessionWindowStart: Date?
     }
 
     func compute(now: Date = Date()) -> Computed {
@@ -28,13 +51,54 @@ actor UsageEngine {
 
         var out = Computed()
         out.eventCount = events.count
+
+        let dayStart = aggregator.calendar.startOfDay(for: now)
         out.todayRows = RowBuilder.rows(byModel: aggregator.today(events, now: now), calculator: &calc)
         out.todayTotal = out.todayRows.reduce(0) { $0 + $1.cost }
+        out.todayProjects = RowBuilder.projectRows(
+            byProjectModel: aggregator.byProject(events, since: dayStart, now: now), calculator: &calc)
+
+        let monthStart = aggregator.calendar.dateInterval(of: .month, for: now)?.start ?? dayStart
         out.monthRows = RowBuilder.rows(byModel: aggregator.thisMonth(events, now: now),
                                         calculator: &calc, top: 3)
         out.monthTotal = out.monthRows.reduce(0) { $0 + $1.cost }
+        out.monthProjects = RowBuilder.projectRows(
+            byProjectModel: aggregator.byProject(events, since: monthStart, now: now), calculator: &calc)
+
+        // Analytics: tokens/day this week, and last-8-weeks tokens+cost.
+        let weekStart = aggregator.calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? dayStart
+        let daysSoFar = (aggregator.calendar.dateComponents([.day], from: weekStart, to: dayStart).day ?? 0) + 1
+        out.daysThisWeek = aggregator.lastDays(events, count: max(daysSoFar, 1), now: now)
+            .map { DayPoint(day: $0.day, tokens: $0.totals.total) }
+        for wk in aggregator.lastWeeks(events, count: 8, now: now) {
+            let cost = weekCost(events, weekStart: wk.weekStart, calendar: aggregator.calendar, calc: &calc)
+            out.weeks.append(WeekPoint(weekStart: wk.weekStart, tokens: wk.totals.total, cost: cost))
+        }
+
         out.unpricedModels = calc.unpricedModels
         return out
+    }
+
+    /// Cost of one week, summed per model (pricing is model-dependent).
+    private func weekCost(_ events: [UsageEvent], weekStart: Date,
+                          calendar: Calendar, calc: inout CostCalculator) -> Decimal {
+        guard let weekEnd = calendar.date(byAdding: .weekOfYear, value: 1, to: weekStart) else { return 0 }
+        var byModel: [String: TokenTotals] = [:]
+        for e in events where e.timestamp >= weekStart && e.timestamp < weekEnd {
+            byModel[e.model, default: TokenTotals()].add(e)
+        }
+        var cost: Decimal = 0
+        for (model, t) in byModel where !CostCalculator.isSynthetic(model) {
+            cost += calc.cost(model: model, totals: t)
+        }
+        return cost
+    }
+
+    /// Fill in the session-window token count once the quota window start is
+    /// known (from the OAuth bucket). Called after a quota fetch.
+    func sessionTokens(windowStart: Date, now: Date = Date()) -> Int {
+        store.scan()
+        return UsageAggregator().sinceWindow(store.events, windowStart: windowStart, now: now).total
     }
 
     /// Refresh the LiteLLM catalog when the on-disk cache is stale; failures
@@ -91,6 +155,12 @@ final class AppState {
     private let engine = UsageEngine()
     private var polling = false
     private var watcher: DirectoryWatcher?
+    // Start of the current 5h quota window, learned from the last quota fetch.
+    // Persisted here (not in Computed) so file-event refreshes — which rebuild
+    // Computed from scratch — can re-fill the session burn figure instead of
+    // blanking it. Cleared once the window resets.
+    private var sessionWindowStart: Date?
+    private var sessionResetsAt: Date?
     private var lastUpdateCheck: Date?
 
     /// Version stamped into the bundle by scripts/bundle.sh.
@@ -123,13 +193,42 @@ final class AppState {
     func refresh(userInitiated: Bool = false) async {
         await refreshUsage()
         let state = await engine.fetchQuota(retryDenied: userInitiated)
-        if case .available(let snapshot) = state { lastSnapshot = snapshot }
+        if case .available(let snapshot) = state {
+            lastSnapshot = snapshot
+            await fillSessionWindow(snapshot)
+        }
         quota = state
     }
 
+    /// Once quota is known, record the 5h session window so later local-only
+    /// refreshes can keep the burn figure current.
+    private func fillSessionWindow(_ snapshot: QuotaSnapshot) async {
+        guard let bucket = snapshot.sessionBucket,
+              let start = bucket.windowStart(length: 5 * 3600) else { return }
+        sessionWindowStart = start
+        sessionResetsAt = bucket.resetsAt
+        await applySessionTokens()
+    }
+
+    /// Recompute the session-window token count from the stored window start,
+    /// unless the window has already reset. Cheap; runs after every rescan.
+    private func applySessionTokens() async {
+        guard let start = sessionWindowStart else { return }
+        if let reset = sessionResetsAt, Date() >= reset {
+            sessionWindowStart = nil; sessionResetsAt = nil
+            usage.sessionWindowStart = nil; usage.sessionTokens = 0
+            return
+        }
+        usage.sessionWindowStart = start
+        usage.sessionTokens = await engine.sessionTokens(windowStart: start)
+    }
+
     /// Cheap local-only refresh: no network, safe to run on every file event.
+    /// `compute()` returns a fresh Computed (session fields zeroed), so re-fill
+    /// them from the persisted window start.
     func refreshUsage() async {
         usage = await engine.compute()
+        await applySessionTokens()
         lastRefreshed = Date()
     }
 
@@ -188,7 +287,7 @@ final class AppState {
     /// Label text: session quota (remaining or used per setting), else today's cost, else placeholder.
     var menuBarText: String {
         if case .available(let snapshot) = quota,
-           let session = snapshot.buckets.first {
+           let session = snapshot.sessionBucket {
             let pct = PercentageMode.current.fraction(usedUtilization: session.utilization)
             return "\(Int((pct * 100).rounded()))%"
         }
@@ -197,10 +296,26 @@ final class AppState {
     }
 
     var menuBarWarning: Bool {
-        if case .available(let snapshot) = quota, let session = snapshot.buckets.first {
+        if case .available(let snapshot) = quota, let session = snapshot.sessionBucket {
             return session.utilization > 0.9
         }
         return false
+    }
+
+    /// Burn rate over the current session window, plus the utilization-based
+    /// projected-exhaustion time. Nil when idle or no quota window is known.
+    struct BurnInfo { let tokensPerHour: Int; let projectedLimit: Date? }
+
+    var burn: BurnInfo? {
+        guard let start = usage.sessionWindowStart, usage.sessionTokens > 0 else { return nil }
+        let hours = Date().timeIntervalSince(start) / 3600
+        guard hours > 0 else { return nil }
+        let rate = Int((Double(usage.sessionTokens) / hours).rounded())
+        var projected: Date?
+        if case .available(let snapshot) = quota, let bucket = snapshot.sessionBucket {
+            projected = bucket.projectedLimit(windowStart: start)
+        }
+        return BurnInfo(tokensPerHour: rate, projectedLimit: projected)
     }
 }
 

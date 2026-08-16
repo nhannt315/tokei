@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
     private var refreshTimer: Timer?
-    private var settingsWindow: NSWindow?
+    private var mainWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -26,8 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // previously removed status item keeps it invisible forever.
         item.autosaveName = "TokeiStatusItem"
         item.isVisible = true
-        item.button?.action = #selector(togglePopover)
+        // Left-click toggles the popover; right-click opens Refresh/Quit menu.
+        item.button?.action = #selector(statusItemClicked)
         item.button?.target = self
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         statusItem = item
 
         // Configure the visible button BEFORE building the popover content, so a
@@ -36,7 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         popover.behavior = .transient
         popover.contentViewController = NSHostingController(
-            rootView: UsagePopoverView(state: state) { [weak self] in self?.showSettings() })
+            rootView: UsagePopoverView(state: state) { [weak self] in self?.showMainWindow() })
 
         // Poll the label off AppState. A plain timer avoids re-arming Observation
         // tracking on the status item, which flickered the icon on each update.
@@ -55,7 +57,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         button.title = " " + state.menuBarText
     }
 
-    @objc private func togglePopover() {
+    /// Left-click toggles the popover; right-click pops a small menu so the app
+    /// stays quittable (the redesigned popover has no Quit button).
+    @objc private func statusItemClicked() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            showContextMenu()
+        } else {
+            togglePopover()
+        }
+    }
+
+    private func togglePopover() {
         guard let button = statusItem?.button else { return }
         if popover.isShown {
             popover.close()
@@ -65,37 +77,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    private func showContextMenu() {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Open Tokei…", action: #selector(showMainWindow), keyEquivalent: "o")
+        menu.addItem(withTitle: "Refresh", action: #selector(refreshNow), keyEquivalent: "r")
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Tokei", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        // Attaching to the item shows the menu on this click, then clears it so
+        // the next left-click still toggles the popover rather than re-opening it.
+        statusItem?.menu = menu
+        statusItem?.button?.performClick(nil)
+        statusItem?.menu = nil
+    }
+
+    @objc private func refreshNow() {
+        Task { await state.refresh(userInitiated: true) }
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// Show a settings window. SwiftUI's `Settings` scene does not surface reliably
-    /// from an `.accessory` app on macOS 26 (`showSettingsWindow:` promotes the app
-    /// but opens no window), so we own a plain `NSWindow` hosting `SettingsView`.
-    /// The app promotes to `.regular` while it is open so the window can take focus,
-    /// and drops back to `.accessory` on close to leave no lingering Dock icon.
-    @objc func showSettings() {
+    /// Show the main window (Overview / Analytics / Settings). SwiftUI's
+    /// `WindowGroup`/`Settings` scenes don't surface reliably from an
+    /// `.accessory` app on recent macOS, so we own a plain `NSWindow`. The app
+    /// promotes to `.regular` while it is open so the window can take focus, and
+    /// drops back to `.accessory` on close to leave no lingering Dock icon.
+    @objc func showMainWindow() {
         popover.close()
         NSApp.setActivationPolicy(.regular)
 
-        if settingsWindow == nil {
+        if mainWindow == nil {
             let window = NSWindow(
-                contentRect: .zero,
-                styleMask: [.titled, .closable],
+                contentRect: NSRect(x: 0, y: 0, width: 780, height: 500),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false)
-            window.title = "Settings"
-            window.contentViewController = NSHostingController(rootView: SettingsView())
+            window.title = "Tokei"
+            window.contentViewController = NSHostingController(rootView: MainWindowView(state: state))
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
-            settingsWindow = window
+            mainWindow = window
         }
 
         NSApp.activate(ignoringOtherApps: true)
-        settingsWindow?.makeKeyAndOrderFront(nil)
+        mainWindow?.makeKeyAndOrderFront(nil)
     }
 
     func windowWillClose(_ notification: Notification) {
-        guard (notification.object as? NSWindow) === settingsWindow else { return }
+        guard (notification.object as? NSWindow) === mainWindow else { return }
         NSApp.setActivationPolicy(.accessory)
     }
 }
@@ -105,6 +134,8 @@ struct TokeiApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        Settings { SettingsView() }
+        // The app is driven entirely by the AppDelegate's NSStatusItem + NSWindow;
+        // this empty settings scene just satisfies the App protocol.
+        Settings { EmptyView() }
     }
 }

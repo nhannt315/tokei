@@ -1,162 +1,196 @@
 import SwiftUI
-import ServiceManagement
 import TrackerCore
 
+/// Menu-bar popover: a strict glance. Two quota bars, cost pair, burn line,
+/// one button into the main window. Settings and Quit live elsewhere (main
+/// window and the status-item right-click menu).
 struct UsagePopoverView: View {
     let state: AppState
-    let onOpenSettings: () -> Void
+    let onOpenMainWindow: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            QuotaSection(state: state)
+            header
+            QuotaBars(state: state)
             Divider()
-            TodaySection(usage: state.usage)
-            Divider()
-            MonthSection(usage: state.usage)
-            Divider()
-            UpdateSection(state: state)
-            FooterSection(state: state, onOpenSettings: onOpenSettings)
-        }
-        .padding(12)
-        .frame(width: 320)
-        .task { await state.refresh(userInitiated: true) }
-    }
-}
-
-// MARK: - Quota
-
-private struct QuotaSection: View {
-    let state: AppState
-    @AppStorage(PercentageMode.defaultsKey) private var percentageModeRaw = PercentageMode.remaining.rawValue
-
-    private var mode: PercentageMode { PercentageMode(rawValue: percentageModeRaw) ?? .remaining }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Quota").font(.headline)
-            switch state.quota {
-            case nil:
-                Text("Loading…").foregroundStyle(.secondary)
-            case .available(let snapshot):
-                bars(snapshot)
-            case .noCredentials:
-                Text("No credentials found. Sign in to Claude Code.")
-                    .foregroundStyle(.secondary)
-            case .tokenExpired:
-                Text("Session expired. Open Claude Code to refresh it.")
-                    .foregroundStyle(.secondary)
-            case .accessDenied:
-                Text("Keychain access denied. Approve the prompt to show quota.")
-                    .foregroundStyle(.secondary)
-            case .networkError(let message):
-                if let stale = state.lastSnapshot {
-                    bars(stale)
-                    Text("Offline — data from \(stale.fetchedAt.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption).foregroundStyle(.orange)
-                } else {
-                    Text("Can't reach quota endpoint: \(message)")
-                        .foregroundStyle(.secondary)
-                }
+            costPair
+            if let burn = state.burn, !isOffline {
+                BurnLine(burn: burn)
             }
-        }
-    }
-
-    private func bars(_ snapshot: QuotaSnapshot) -> some View {
-        ForEach(snapshot.buckets, id: \.key) { bucket in
-            let shown = mode.fraction(usedUtilization: bucket.utilization)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text(Self.title(bucket.key))
-                    Spacer()
-                    Text("\(Int((shown * 100).rounded()))% \(mode == .remaining ? "left" : "used")")
-                        .foregroundStyle(bucket.utilization > 0.9 ? .red : .secondary)
-                }
-                .font(.callout)
-                ProgressView(value: shown)
-                if let reset = bucket.resetsAt {
-                    Text("resets in ") .font(.caption).foregroundStyle(.secondary)
-                    + Text(reset, style: .relative).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    static func title(_ key: String) -> String {
-        switch key {
-        case "session", "five_hour": return "Session (5h)"
-        case "weekly_all", "seven_day": return "Weekly (all models)"
-        default:
-            if let name = key.split(separator: ":").last, key.contains(":") {
-                return "Weekly · \(name)"
-            }
-            return key
-        }
-    }
-}
-
-// MARK: - Today / Month
-
-private struct TodaySection: View {
-    let usage: UsageEngine.Computed
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Today").font(.headline)
-                Spacer()
-                Text(costString(usage.todayTotal)).font(.headline)
-            }
-            if usage.eventCount == 0 {
-                Text("No Claude Code data found").foregroundStyle(.secondary)
-            } else if usage.todayRows.isEmpty {
-                Text("No usage today").foregroundStyle(.secondary)
-            } else {
-                ForEach(usage.todayRows) { row in
-                    HStack {
-                        Text(RowBuilder.displayName(row.model))
-                        Spacer()
-                        Text("\(row.totals.total.formatted()) tok")
-                            .foregroundStyle(.secondary).font(.caption)
-                        Text(costString(row.cost)).monospacedDigit()
-                    }
-                    .font(.callout)
-                }
-            }
-            if !usage.unpricedModels.isEmpty {
-                Label("No pricing for: \(usage.unpricedModels.sorted().joined(separator: ", "))",
+            if !state.usage.unpricedModels.isEmpty {
+                Label("No pricing for: \(state.usage.unpricedModels.sorted().joined(separator: ", "))",
                       systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
             }
+            UpdateSection(state: state)
+            Divider()
+            Button("Open Tokei…") { onOpenMainWindow() }
+                .frame(maxWidth: .infinity)
         }
+        .padding(14)
+        .frame(width: 340)
+        .task { await state.refresh(userInitiated: true) }
+    }
+
+    private var isOffline: Bool {
+        if case .networkError = state.quota, state.lastSnapshot != nil { return true }
+        return false
+    }
+
+    private var header: some View {
+        HStack {
+            Text("Tokei").font(.system(size: 13, weight: .bold))
+            Spacer()
+            if let stamp = state.lastRefreshed {
+                Text("Updated \(stamp.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Button { Task { await state.refresh(userInitiated: true) } } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .help("Refresh")
+        }
+    }
+
+    private var costPair: some View {
+        HStack(spacing: 0) {
+            costColumn("Today", state.usage.todayTotal)
+            costColumn("This month", state.usage.monthTotal)
+        }
+    }
+
+    private func costColumn(_ label: String, _ value: Decimal) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(costString(value)).font(.system(size: 16, weight: .semibold)).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-private struct MonthSection: View {
-    let usage: UsageEngine.Computed
+// MARK: - Quota bars (with error / offline / loading states)
+
+private struct QuotaBars: View {
+    let state: AppState
+    @AppStorage(PercentageMode.defaultsKey) private var modeRaw = PercentageMode.remaining.rawValue
+    private var mode: PercentageMode { PercentageMode(rawValue: modeRaw) ?? .remaining }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("This month").font(.headline)
-                Spacer()
-                Text(costString(usage.monthTotal)).font(.headline)
-            }
-            ForEach(usage.monthRows) { row in
-                HStack {
-                    Text(RowBuilder.displayName(row.model))
-                    Spacer()
-                    Text(costString(row.cost)).monospacedDigit()
+        switch state.quota {
+        case nil:
+            loading
+        case .available(let snapshot):
+            bars(snapshot, stale: false)
+        case .noCredentials:
+            errorCard("No credentials", "Sign in to Claude Code, then retry.")
+        case .tokenExpired:
+            errorCard("Session expired", "Quota can't be read. Re-authenticate in Claude Code, then retry.")
+        case .accessDenied:
+            errorCard("Keychain access denied", "Approve the Keychain prompt to show quota.")
+        case .networkError(let message):
+            if let stale = state.lastSnapshot {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Offline — last snapshot at \(stale.fetchedAt.formatted(date: .omitted, time: .shortened))",
+                          systemImage: "wifi.slash")
+                        .font(.caption).foregroundStyle(.orange)
+                    bars(stale, stale: true).opacity(0.55)
                 }
-                .font(.callout).foregroundStyle(.secondary)
+            } else {
+                errorCard("Offline", message)
+            }
+        }
+    }
+
+    private var loading: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(0..<2, id: \.self) { _ in
+                VStack(alignment: .leading, spacing: 5) {
+                    RoundedRectangle(cornerRadius: 5).fill(.secondary.opacity(0.15))
+                        .frame(width: 120, height: 11)
+                    RoundedRectangle(cornerRadius: 3).fill(.secondary.opacity(0.15)).frame(height: 6)
+                }
+            }
+        }
+    }
+
+    private func errorCard(_ title: String, _ detail: String) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).font(.title3)
+            Text(title).font(.system(size: 13, weight: .semibold))
+            Text(detail).font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Retry") { Task { await state.refresh(userInitiated: true) } }
+                .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.5)))
+    }
+
+    @ViewBuilder
+    private func bars(_ snapshot: QuotaSnapshot, stale: Bool) -> some View {
+        let ordered = orderedBuckets(snapshot)
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(ordered, id: \.key) { bucket in
+                bar(bucket)
+            }
+        }
+    }
+
+    /// Session first, then weekly, then any model-specific caps in original order.
+    private func orderedBuckets(_ snapshot: QuotaSnapshot) -> [QuotaBucket] {
+        var head: [QuotaBucket] = []
+        if let s = snapshot.sessionBucket { head.append(s) }
+        if let w = snapshot.weeklyBucket { head.append(w) }
+        let headKeys = Set(head.map(\.key))
+        return head + snapshot.buckets.filter { !headKeys.contains($0.key) }
+    }
+
+    private func bar(_ bucket: QuotaBucket) -> some View {
+        let status = QuotaStatus(utilization: bucket.utilization)
+        let shown = mode.fraction(usedUtilization: bucket.utilization)
+        let word = mode == .remaining ? "remaining" : "used"
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(bucketShortTitle(bucket.key)).font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Text("\(Int((shown * 100).rounded()))% \(word)")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(status == .healthy ? .primary : status.color)
+            }
+            ProgressView(value: shown)
+                .tint(status.color)
+            if let reset = bucket.resetsAt {
+                Text("Resets \(reset.formatted(date: .omitted, time: .shortened)) · ")
+                    .font(.caption).foregroundStyle(.secondary)
+                + Text(reset, style: .relative).font(.caption).foregroundStyle(.secondary)
             }
         }
     }
 }
 
-// MARK: - Update
+// MARK: - Burn line
 
-/// Renders nothing in the common case (no update, running current). Only
-/// speaks up when there is something to install or a failure to report.
+private struct BurnLine: View {
+    let burn: AppState.BurnInfo
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "gauge.with.needle").font(.caption)
+            Text("Burning \(tokenString(burn.tokensPerHour)) tok/hr")
+            if let limit = burn.projectedLimit {
+                Text("· at this pace, limit ≈ \(limit.formatted(date: .omitted, time: .shortened))")
+            }
+        }
+        .font(.caption).foregroundStyle(.secondary)
+    }
+}
+
+// MARK: - Update (kept from the prior popover — not in the design spec but real)
+
+/// Renders nothing in the common case. Speaks up only when there is an update
+/// to install or a failure to report.
 private struct UpdateSection: View {
     let state: AppState
 
@@ -186,50 +220,5 @@ private struct UpdateSection: View {
                     .font(.caption)
             }
         }
-    }
-}
-
-// MARK: - Footer
-
-private struct FooterSection: View {
-    let state: AppState
-    let onOpenSettings: () -> Void
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
-    @State private var loginError: String?
-
-    // SMAppService only works from a real installed .app bundle.
-    private var bundled: Bool { Bundle.main.bundleURL.pathExtension == "app" }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if bundled {
-                Toggle("Launch at Login", isOn: $launchAtLogin)
-                    .font(.callout)
-                    .onChange(of: launchAtLogin) { _, enabled in
-                        do {
-                            if enabled { try SMAppService.mainApp.register() }
-                            else { try SMAppService.mainApp.unregister() }
-                            loginError = nil
-                        } catch {
-                            launchAtLogin = SMAppService.mainApp.status == .enabled
-                            loginError = error.localizedDescription
-                        }
-                    }
-                if let loginError {
-                    Text(loginError).font(.caption).foregroundStyle(.orange)
-                }
-            }
-            HStack {
-                if let stamp = state.lastRefreshed {
-                    Text("Updated \(stamp.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Settings…") { onOpenSettings() }
-                Button("Refresh") { Task { await state.refresh(userInitiated: true) } }
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-            }
-        }
-        .controlSize(.small)
     }
 }
