@@ -25,6 +25,16 @@ cmp -s "$BIN_PATH/TrackerCLI" "$APP/Contents/MacOS/tokei-cli" || { echo "bundle 
 
 VERSION="$(git describe --tags --always 2>/dev/null || echo 0.1.0)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION#v}" "$APP/Contents/Info.plist"
+
+# Opt-in dev bundle id. Control Center keeps per-bundle-id menu bar state; a dev
+# machine that has churned many local builds under the shipped id can end up with
+# that id suppressed (icon never shows), fixable only via System Settings. Build
+# with DEV_BUNDLE_ID=1 to run under com.nhannt315.tokei.dev instead, keeping the
+# shipped id clean. Never set this in CI — releases must keep the real id.
+if [ -n "${DEV_BUNDLE_ID:-}" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.nhannt315.tokei.dev" "$APP/Contents/Info.plist"
+    echo "  bundle id: com.nhannt315.tokei.dev (dev build)"
+fi
 # Signing policy: ad-hoc by default, for distribution.
 #
 # A self-signed certificate (e.g. "Tokei Dev") makes the designated requirement
