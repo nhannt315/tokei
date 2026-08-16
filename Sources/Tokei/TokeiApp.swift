@@ -45,6 +45,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.renderLabel() }
         }
+
+        applyAppearance()
+        NotificationCenter.default.addObserver(forName: AppearanceMode.didChange,
+                                               object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyAppearance() }
+        }
+
+    }
+
+    /// Apply the user's light/dark/system choice to every app surface. The
+    /// status-item icon is intentionally left alone: it's a template image that
+    /// follows the menu bar, not the app's chosen appearance.
+    func applyAppearance() {
+        let a = AppearanceMode.current.nsAppearance
+        NSApp.appearance = a
+        popover.appearance = a       // NSPopover does NOT inherit NSApp.appearance
+        mainWindow?.appearance = a
     }
 
     private func renderLabel() {
@@ -79,10 +96,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Open Tokei…", action: #selector(showMainWindow), keyEquivalent: "o")
-        menu.addItem(withTitle: "Refresh", action: #selector(refreshNow), keyEquivalent: "r")
+        menu.addItem(withTitle: loc("Open Tokei…"), action: #selector(showMainWindow), keyEquivalent: "o")
+        menu.addItem(withTitle: loc("Refresh"), action: #selector(refreshNow), keyEquivalent: "r")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Tokei", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: loc("Quit Tokei"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         // Attaching to the item shows the menu on this click, then clears it so
         // the next left-click still toggles the popover rather than re-opening it.
         statusItem?.menu = menu
@@ -117,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.delegate = self
             window.center()
             mainWindow = window
+            applyAppearance()   // window created lazily → apply the current choice now
         }
 
         NSApp.activate(ignoringOtherApps: true)

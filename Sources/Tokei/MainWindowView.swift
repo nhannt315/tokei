@@ -10,6 +10,14 @@ struct MainWindowView: View {
     enum Section: String, CaseIterable, Identifiable {
         case overview = "Overview", analytics = "Analytics", settings = "Settings"
         var id: String { rawValue }
+        /// Localized display name; `rawValue` stays the stable English id/tag.
+        var label: String {
+            switch self {
+            case .overview: return loc("Overview")
+            case .analytics: return loc("Analytics")
+            case .settings: return loc("Settings")
+            }
+        }
         var symbol: String {
             switch self {
             case .overview: return "gauge.with.needle"
@@ -24,11 +32,11 @@ struct MainWindowView: View {
     var body: some View {
         NavigationSplitView {
             List(Section.allCases, selection: $selection) { section in
-                Label(section.rawValue, systemImage: section.symbol).tag(section)
+                Label(section.label, systemImage: section.symbol).tag(section)
             }
             .navigationSplitViewColumnWidth(190)
             .safeAreaInset(edge: .bottom) {
-                Text("Tokei \(AppState.currentVersion)")
+                Text(verbatim: "Tokei \(AppState.currentVersion)")
                     .font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
@@ -40,14 +48,14 @@ struct MainWindowView: View {
             case .settings: SettingsPane()
             }
         }
-        .navigationTitle(selection.rawValue)
+        .navigationTitle(selection.label)
         .frame(minWidth: 640, minHeight: 420)
         .toolbar {
             if selection == .overview {
                 Button { Task { await state.refresh(userInitiated: true) } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("Refresh")
+                .help(loc("Refresh"))
             }
         }
         .task { await state.refresh(userInitiated: true) }
@@ -60,7 +68,10 @@ private struct OverviewPane: View {
     let state: AppState
     /// Which timeframe the breakdown tables show.
     @State private var scope: Scope = .today
-    enum Scope: String, CaseIterable { case today = "Today", month = "This Month" }
+    enum Scope: String, CaseIterable {
+        case today = "Today", month = "This Month"
+        var label: String { self == .today ? loc("Today") : loc("This Month") }
+    }
 
     var body: some View {
         ScrollView {
@@ -68,10 +79,10 @@ private struct OverviewPane: View {
                 SessionCard(state: state)
 
                 HStack {
-                    Text("Breakdown").font(.system(size: 13, weight: .semibold))
+                    Text("Breakdown", bundle: .module).font(.system(size: 13, weight: .semibold))
                     Spacer()
                     Picker("", selection: $scope) {
-                        ForEach(Scope.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        ForEach(Scope.allCases, id: \.self) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.segmented).fixedSize().labelsHidden()
                 }
@@ -103,40 +114,52 @@ private struct SessionCard: View {
                 let status = QuotaStatus(utilization: bucket.utilization)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("CURRENT SESSION").font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
+                        Text("CURRENT SESSION", bundle: .module)
+                            .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
                         Spacer()
                         if let reset = bucket.resetsAt {
-                            (Text("Resets \(reset.formatted(date: .omitted, time: .shortened)) · ")
+                            (Text("Resets \(reset.formatted(date: .omitted, time: .shortened)) · ", bundle: .module)
                              + Text(reset, style: .relative))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     ProgressView(value: bucket.utilization).tint(status.color)
                     HStack(spacing: 0) {
-                        stat("Consumed", tokenString(state.usage.sessionTokens) + " tok",
-                             sub: "\(Int((bucket.utilization * 100).rounded()))% of quota")
-                        if let burn = state.burn {
-                            stat("Burn rate", tokenString(burn.tokensPerHour) + " tok/hr",
-                                 sub: burn.projectedLimit.map { "limit ≈ \($0.formatted(date: .omitted, time: .shortened))" } ?? "—")
-                        } else {
-                            stat("Burn rate", "—", sub: "idle")
+                        let usedPct = Int((bucket.utilization * 100).rounded())
+                        stat("Consumed", tokenString(state.usage.sessionTokens) + " tok") {
+                            Text(verbatim: String(format: loc("pct.ofQuota"), usedPct))
                         }
-                        stat("Remaining", "\(Int(((1 - bucket.utilization) * 100).rounded()))%",
-                             sub: "")
+                        if let burn = state.burn {
+                            stat("Burn rate", tokenString(burn.tokensPerHour) + " tok/hr") {
+                                if let limit = burn.projectedLimit {
+                                    Text("limit ≈ \(limit.formatted(date: .omitted, time: .shortened))", bundle: .module)
+                                } else {
+                                    Text(verbatim: "—")
+                                }
+                            }
+                        } else {
+                            stat("Burn rate", "—") { Text("idle", bundle: .module) }
+                        }
+                        stat("Remaining", "\(Int(((1 - bucket.utilization) * 100).rounded()))%") {
+                            Text(verbatim: "")
+                        }
                     }
                 }
             } else {
-                Text("Quota unavailable").foregroundStyle(.secondary)
+                Text("Quota unavailable", bundle: .module).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    private func stat(_ label: String, _ value: String, sub: String) -> some View {
+    /// `label` localizes; `value` is verbatim (tokens/percent + technical unit);
+    /// `sub` is a caller-built (often localized) caption view.
+    private func stat<Sub: View>(_ label: LocalizedStringKey, _ value: String,
+                                 @ViewBuilder sub: () -> Sub) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.system(size: 17, weight: .semibold)).monospacedDigit()
-            Text(sub).font(.caption).foregroundStyle(.secondary)
+            Text(label, bundle: .module).font(.caption).foregroundStyle(.secondary)
+            Text(verbatim: value).font(.system(size: 17, weight: .semibold)).monospacedDigit()
+            sub().font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -167,23 +190,35 @@ private struct ProjectTable: View {
 /// Shared 3-column breakdown table with a Total footer.
 private struct BreakdownTable: View {
     struct Row: Identifiable { let name: String; let tokens: Int; let cost: Decimal; var id: String { name } }
-    let header: String
+    /// Localized column header ("Model" / "Project").
+    let header: LocalizedStringKey
     let total: Decimal
     let rows: [Row]
 
     var body: some View {
         VStack(spacing: 0) {
-            row(header, "Tokens", "Cost", isHeader: true)
+            // Header cells localize; the name column shows the column title.
+            gridRow(name: Text(header, bundle: .module),
+                    tokens: Text("Tokens", bundle: .module),
+                    cost: Text("Cost", bundle: .module),
+                    weight: .semibold, style: AnyShapeStyle(.secondary))
             Divider()
             if rows.isEmpty {
-                Text("No usage").font(.caption).foregroundStyle(.secondary)
+                Text("No usage", bundle: .module).font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
             } else {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { i, r in
-                    row(r.name, tokenString(r.tokens), costString(r.cost), alt: i.isMultiple(of: 2) == false)
+                    // Data rows are verbatim: model/project name, tokens, cost.
+                    gridRow(name: Text(verbatim: r.name),
+                            tokens: Text(verbatim: tokenString(r.tokens)),
+                            cost: Text(verbatim: costString(r.cost)),
+                            alt: i.isMultiple(of: 2) == false)
                 }
                 Divider()
-                row("Total", "", costString(total), isFooter: true)
+                gridRow(name: Text("Total", bundle: .module),
+                        tokens: Text(verbatim: ""),
+                        cost: Text(verbatim: costString(total)),
+                        weight: .semibold)
             }
         }
         .background(RoundedRectangle(cornerRadius: 10).fill(.background))
@@ -191,18 +226,19 @@ private struct BreakdownTable: View {
         .frame(maxWidth: .infinity, alignment: .top)
     }
 
-    private func row(_ name: String, _ tokens: String, _ cost: String,
-                     isHeader: Bool = false, isFooter: Bool = false, alt: Bool = false) -> some View {
+    private func gridRow(name: Text, tokens: Text, cost: Text,
+                         weight: Font.Weight = .regular,
+                         style: AnyShapeStyle = AnyShapeStyle(.primary),
+                         alt: Bool = false) -> some View {
         HStack(spacing: 8) {
-            Text(name).lineLimit(1).truncationMode(.head)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
-            Text(tokens).frame(width: 52, alignment: .trailing).monospacedDigit()
-            Text(cost).frame(width: 52, alignment: .trailing).monospacedDigit()
+            name.lineLimit(1).truncationMode(.head)
+                .frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
+            tokens.frame(width: 52, alignment: .trailing).monospacedDigit()
+            cost.frame(width: 52, alignment: .trailing).monospacedDigit()
         }
         .font(.caption)
-        .fontWeight(isHeader || isFooter ? .semibold : .regular)
-        .foregroundStyle(isHeader ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+        .fontWeight(weight)
+        .foregroundStyle(style)
         .padding(.horizontal, 12).padding(.vertical, 7)
         .background(alt ? Color.primary.opacity(0.03) : .clear)
     }
@@ -213,8 +249,11 @@ private struct BreakdownTable: View {
 struct SettingsPane: View {
     @AppStorage(PercentageMode.defaultsKey) private var mode = PercentageMode.remaining.rawValue
     @AppStorage("quotaAlertsEnabled") private var alertsEnabled = true
+    @AppStorage(AppearanceMode.defaultsKey) private var appearance = AppearanceMode.system.rawValue
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
+    @State private var language = LanguageChoice.current
+    @State private var languageChanged = false
 
     private var bundled: Bool { Bundle.main.bundleURL.pathExtension == "app" }
     private var currentMode: PercentageMode { PercentageMode(rawValue: mode) ?? .remaining }
@@ -222,30 +261,67 @@ struct SettingsPane: View {
     var body: some View {
         Form {
             if bundled {
-                Section("General") {
-                    Toggle("Launch at login", isOn: $launchAtLogin)
+                Section {
+                    Toggle(isOn: $launchAtLogin) { Text("Launch at login", bundle: .module) }
                         .onChange(of: launchAtLogin) { _, enabled in setLaunch(enabled) }
                     if let loginError {
+                        // System error text — not localized by us.
                         Text(loginError).font(.caption).foregroundStyle(.orange)
                     }
-                }
+                    languageRow
+                } header: { Text("General", bundle: .module) }
             }
-            Section("Menu Bar") {
-                Picker("Show quota as", selection: $mode) {
+            Section {
+                Picker(selection: $mode) {
                     ForEach(PercentageMode.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-                }
+                } label: { Text("Show quota as", bundle: .module) }
                 .pickerStyle(.segmented)
-                Text("Menu bar and popover will show e.g. \"82% \(currentMode == .remaining ? "remaining" : "used")\".")
+                // Built via loc() (not a Text LocalizedStringKey) so the literal
+                // "%" in the example isn't parsed as a format specifier.
+                Text(verbatim: currentMode == .remaining
+                     ? loc("menuBarHint.remaining") : loc("menuBarHint.used"))
                     .font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Notifications") {
-                Toggle("Quota alerts", isOn: $alertsEnabled)
-                Text("Notifies when the 5-hour session reaches 70% and 90% used.")
+            } header: { Text("Menu Bar", bundle: .module) }
+            Section {
+                Picker(selection: $appearance) {
+                    ForEach(AppearanceMode.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+                } label: { Text("Appearance", bundle: .module) }
+                .pickerStyle(.segmented)
+                .onChange(of: appearance) { _, _ in
+                    NotificationCenter.default.post(name: AppearanceMode.didChange, object: nil)
+                }
+            } header: { Text("Appearance", bundle: .module) }
+            Section {
+                Toggle(isOn: $alertsEnabled) { Text("Quota alerts", bundle: .module) }
+                Text(verbatim: loc("quotaAlerts.hint"))
                     .font(.caption).foregroundStyle(.secondary)
-            }
+            } header: { Text("Notifications", bundle: .module) }
         }
         .formStyle(.grouped)
         .frame(maxWidth: 560)
+    }
+
+    /// Language picker + relaunch note. Language is read once at process start,
+    /// so switching requires a relaunch to take effect.
+    @ViewBuilder private var languageRow: some View {
+        Picker(selection: $language) {
+            ForEach(LanguageChoice.allCases, id: \.self) { Text($0.label).tag($0) }
+        } label: { Text("Language", bundle: .module) }
+        .onChange(of: language) { _, choice in
+            choice.apply()
+            languageChanged = true
+        }
+        if languageChanged {
+            HStack {
+                Text("Takes effect after relaunch.", bundle: .module)
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if bundled {
+                    Button { relaunch() } label: { Text("Relaunch", bundle: .module) }
+                        .controlSize(.small)
+                }
+            }
+        }
     }
 
     private func setLaunch(_ enabled: Bool) {
@@ -257,5 +333,51 @@ struct SettingsPane: View {
             launchAtLogin = SMAppService.mainApp.status == .enabled
             loginError = error.localizedDescription
         }
+    }
+
+    /// Quit and reopen so the process re-reads AppleLanguages. Modeled on
+    /// UpdateInstaller's detached-swap script: a child shell waits for this
+    /// process to exit, then `open -n`s the bundle.
+    private func relaunch() {
+        let path = Bundle.main.bundleURL.path
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", "while kill -0 \(pid) 2>/dev/null; do sleep 0.1; done; open -n '\(path)'"]
+        try? task.run()
+        NSApp.terminate(nil)
+    }
+}
+
+/// In-app language override. `.system` clears AppleLanguages (follow OS);
+/// otherwise pin the chosen language, read at next launch.
+enum LanguageChoice: String, CaseIterable {
+    case system, en, ja
+
+    var label: String {
+        switch self {
+        case .system: return loc("System")
+        case .en: return "English"
+        case .ja: return "日本語"
+        }
+    }
+
+    func apply() {
+        let key = "AppleLanguages"
+        switch self {
+        case .system: UserDefaults.standard.removeObject(forKey: key)
+        case .en, .ja: UserDefaults.standard.set([rawValue], forKey: key)
+        }
+    }
+
+    /// Current choice, read from the app's OWN defaults domain — not the merged
+    /// UserDefaults view, which always carries the OS's AppleLanguages and would
+    /// make a mono-language Mac look like it has an override.
+    static var current: LanguageChoice {
+        let domain = UserDefaults.standard.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")
+        guard let langs = domain?["AppleLanguages"] as? [String], langs.count == 1,
+              let choice = LanguageChoice(rawValue: String(langs[0].prefix(2)))
+        else { return .system }
+        return choice
     }
 }
