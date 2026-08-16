@@ -64,4 +64,75 @@ public struct UsageAggregator {
         }
         return out
     }
+
+    /// project slug → model → totals, over `[start, now]`. Slug is the
+    /// `~/.claude/projects/<slug>/` folder; extracted from each event's path.
+    public func byProject(_ events: [UsageEvent],
+                          since start: Date, now: Date = Date()) -> [String: [String: TokenTotals]] {
+        var out: [String: [String: TokenTotals]] = [:]
+        for e in events where e.timestamp >= start && e.timestamp <= now {
+            let project = Self.projectSlug(from: e.sessionPath)
+            out[project, default: [:]][e.model, default: TokenTotals()].add(e)
+        }
+        return out
+    }
+
+    /// startOfDay → merged totals, for the N days ending on `now`'s day
+    /// (oldest first). Days with no activity are present with zero totals so
+    /// charts render a continuous axis.
+    public func lastDays(_ events: [UsageEvent], count: Int, now: Date = Date()) -> [(day: Date, totals: TokenTotals)] {
+        let today = calendar.startOfDay(for: now)
+        var byDay: [Date: TokenTotals] = [:]
+        for e in events {
+            let day = calendar.startOfDay(for: e.timestamp)
+            byDay[day, default: TokenTotals()].add(e)
+        }
+        return (0..<count).reversed().compactMap { back in
+            guard let day = calendar.date(byAdding: .day, value: -back, to: today) else { return nil }
+            return (day, byDay[day] ?? TokenTotals())
+        }
+    }
+
+    /// Week-start → merged totals, for the N weeks ending on `now`'s week
+    /// (oldest first). Empty weeks included as zeros.
+    public func lastWeeks(_ events: [UsageEvent], count: Int, now: Date = Date()) -> [(weekStart: Date, totals: TokenTotals)] {
+        guard let thisWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start else { return [] }
+        var byWeek: [Date: TokenTotals] = [:]
+        for e in events {
+            if let ws = calendar.dateInterval(of: .weekOfYear, for: e.timestamp)?.start {
+                byWeek[ws, default: TokenTotals()].add(e)
+            }
+        }
+        return (0..<count).reversed().compactMap { back in
+            guard let ws = calendar.date(byAdding: .weekOfYear, value: -back, to: thisWeek) else { return nil }
+            return (ws, byWeek[ws] ?? TokenTotals())
+        }
+    }
+
+    /// Merged token totals for events inside the current 5-hour session window,
+    /// i.e. `timestamp >= windowStart`. Used for the "burning X tok/hr" figure.
+    public func sinceWindow(_ events: [UsageEvent], windowStart: Date, now: Date = Date()) -> TokenTotals {
+        var totals = TokenTotals()
+        for e in events where e.timestamp >= windowStart && e.timestamp <= now { totals.add(e) }
+        return totals
+    }
+
+    /// Decode a `~/.claude/projects/<slug>/…jsonl` path into a display path.
+    /// The slug encodes the original project dir with `/` → `-`; we reverse
+    /// that best-effort and abbreviate the home dir. Display-only (lossy when a
+    /// real directory name contains a dash).
+    public static func projectSlug(from sessionPath: String) -> String {
+        let parts = sessionPath.split(separator: "/")
+        guard let i = parts.firstIndex(of: "projects"), i + 1 < parts.count else {
+            return "unknown"
+        }
+        let slug = String(parts[i + 1])
+        // Leading dash = absolute path; turn dashes back into slashes.
+        var decoded = slug.hasPrefix("-") ? "/" + slug.dropFirst().replacingOccurrences(of: "-", with: "/")
+                                          : slug.replacingOccurrences(of: "-", with: "/")
+        if let home = ProcessInfo.processInfo.environment["HOME"], decoded.hasPrefix(home) {
+            decoded = "~" + decoded.dropFirst(home.count)
+        }
+        return decoded
+    }
 }

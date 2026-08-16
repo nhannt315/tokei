@@ -312,4 +312,73 @@ Thread.sleep(forTimeInterval: 1.5)   // any un-debounced extra callbacks would l
 check(counter.sync { fires } == 1, "burst of 3 writes debounced into exactly 1 callback")
 _ = watcher
 
+// MARK: - New aggregators (project / weekly / session window)
+
+print("UsageAggregator extensions")
+
+// Project slug decode.
+check(UsageAggregator.projectSlug(from: "/x/.claude/projects/-Users-nhannt-code-tokei/s.jsonl")
+        == "/Users/nhannt/code/tokei" || UsageAggregator.projectSlug(from: "/x/.claude/projects/-Users-nhannt-code-tokei/s.jsonl").hasSuffix("code/tokei"),
+      "projectSlug decodes dash-encoded absolute path")
+check(UsageAggregator.projectSlug(from: "/some/other/path.jsonl") == "unknown",
+      "projectSlug returns 'unknown' when no project segment")
+
+// Deterministic calendar/clock: UTC, week starts Monday.
+var cal = Calendar(identifier: .gregorian)
+cal.timeZone = TimeZone(identifier: "UTC")!
+cal.firstWeekday = 2
+let agg = UsageAggregator(calendar: cal)
+func iso(_ s: String) -> Date { ISO8601DateFormatter().date(from: s)! }
+func ev(_ model: String, _ ts: String, out: Int, path: String) -> UsageEvent {
+    UsageEvent(dedupeKey: ts + path, model: model, timestamp: iso(ts),
+               inputTokens: 0, outputTokens: out, cacheReadTokens: 0,
+               cacheCreate5m: 0, cacheCreate1h: 0, sessionPath: path)
+}
+let now = iso("2026-08-13T12:00:00Z")   // a Thursday
+let pA = "/h/.claude/projects/-proj-a/s.jsonl"
+let pB = "/h/.claude/projects/-proj-b/s.jsonl"
+let sample = [
+    ev("claude-sonnet-5", "2026-08-13T09:00:00Z", out: 300, path: pA),  // today, proj-a
+    ev("claude-sonnet-5", "2026-08-13T10:00:00Z", out: 200, path: pB),  // today, proj-b
+    ev("claude-sonnet-5", "2026-08-11T10:00:00Z", out: 100, path: pA),  // Tue this week
+    ev("claude-sonnet-5", "2026-08-04T10:00:00Z", out: 700, path: pA),  // last week
+]
+
+// byProject over today only.
+let dayStart = cal.startOfDay(for: now)
+let byProj = agg.byProject(sample, since: dayStart, now: now)
+check(byProj.count == 2, "byProject splits today's two projects")
+check(byProj["/proj/a"]?["claude-sonnet-5"]?.total == 300, "byProject sums proj-a today = 300")
+
+// lastDays: current week has activity Tue(11) + Thu(13).
+let days = agg.lastDays(sample, count: 4, now: now)   // Mon..Thu
+check(days.count == 4, "lastDays returns requested count incl. empty days")
+check(days.last?.totals.total == 500, "lastDays: Thursday total = 300+200")
+check(days[1].totals.total == 100, "lastDays: Tuesday total = 100")
+check(days[0].totals.total == 0 && days[2].totals.total == 0, "lastDays fills empty days with zero")
+
+// lastWeeks: this week = 600 (300+200+100), previous = 700.
+let weeks = agg.lastWeeks(sample, count: 2, now: now)
+check(weeks.count == 2, "lastWeeks returns 2 weeks")
+check(weeks.last?.totals.total == 600, "lastWeeks: current week = 600")
+check(weeks.first?.totals.total == 700, "lastWeeks: previous week = 700")
+
+// Session window: only events within the last 5h before now.
+let windowStart = now.addingTimeInterval(-5 * 3600)   // 07:00Z
+check(agg.sinceWindow(sample, windowStart: windowStart, now: now).total == 500,
+      "sinceWindow counts only in-window tokens (09:00 + 10:00) = 500")
+
+// projectedLimit: 50% used halfway through window → limit at window end.
+let ws = iso("2026-08-13T10:00:00Z")
+let midNow = iso("2026-08-13T11:00:00Z")   // 1h elapsed of a 2h-equivalent projection
+let bucket = QuotaBucket(key: "five_hour", utilization: 0.5, resetsAt: nil)
+if let projected = bucket.projectedLimit(windowStart: ws, now: midNow) {
+    check(abs(projected.timeIntervalSince(iso("2026-08-13T12:00:00Z"))) < 1,
+          "projectedLimit: 50% in 1h → 100% at 2h")
+} else {
+    check(false, "projectedLimit should be non-nil at 50%")
+}
+check(QuotaBucket(key: "x", utilization: 0, resetsAt: nil).projectedLimit(windowStart: ws, now: midNow) == nil,
+      "projectedLimit nil when idle")
+
 print("\nall \(checksRun) checks passed")
