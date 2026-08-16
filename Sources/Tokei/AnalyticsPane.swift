@@ -9,9 +9,11 @@ struct AnalyticsPane: View {
 
     var body: some View {
         if usage.eventCount == 0 {
-            ContentUnavailableView("No usage yet",
-                                   systemImage: "chart.bar.xaxis",
-                                   description: Text("Charts appear after your first Claude Code session is recorded."))
+            ContentUnavailableView {
+                Label { Text("No usage yet", bundle: .module) } icon: { Image(systemName: "chart.bar.xaxis") }
+            } description: {
+                Text("Charts appear after your first Claude Code session is recorded.", bundle: .module)
+            }
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -34,7 +36,7 @@ private struct TokensPerDayChart: View {
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                Text("TOKENS PER DAY — THIS WEEK")
+                Text("TOKENS PER DAY — THIS WEEK", bundle: .module)
                     .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
                 Chart(days) { d in
                     BarMark(x: .value("Day", d.day, unit: .day),
@@ -66,7 +68,7 @@ private struct WeeklyCostChart: View {
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                Text("WEEKLY COST — LAST 8 WEEKS")
+                Text("WEEKLY COST — LAST 8 WEEKS", bundle: .module)
                     .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
                 Chart(weeks) { w in
                     BarMark(x: .value("Week", w.weekStart, unit: .weekOfYear),
@@ -101,9 +103,9 @@ private struct WeeklyRollupTable: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("Week").frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
-            Text("Tokens").frame(width: 52, alignment: .trailing)
-            Text("Cost").frame(width: 52, alignment: .trailing)
+            Text("Week", bundle: .module).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
+            Text("Tokens", bundle: .module).frame(width: 52, alignment: .trailing)
+            Text("Cost", bundle: .module).frame(width: 52, alignment: .trailing)
         }
         .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
         .padding(.horizontal, 12).padding(.vertical, 7)
@@ -111,25 +113,22 @@ private struct WeeklyRollupTable: View {
 
     private func row(label: String, tokens: String, cost: String, alt: Bool) -> some View {
         HStack(spacing: 8) {
-            Text(label).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
-            Text(tokens).frame(width: 52, alignment: .trailing).monospacedDigit()
-            Text(cost).frame(width: 52, alignment: .trailing).monospacedDigit()
+            // label/tokens/cost are locale-formatted values → verbatim.
+            Text(verbatim: label).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
+            Text(verbatim: tokens).frame(width: 52, alignment: .trailing).monospacedDigit()
+            Text(verbatim: cost).frame(width: 52, alignment: .trailing).monospacedDigit()
         }
         .font(.caption)
         .padding(.horizontal, 12).padding(.vertical, 6)
         .background(alt ? Color.primary.opacity(0.03) : .clear)
     }
 
-    /// "Aug 10 – 16" for a week starting Aug 10.
+    /// Locale-aware week range. en: "Aug 10 – 16"; ja: "8/10～8/16". The
+    /// interval formatter picks the region's separator and field order.
     static func range(_ start: Date) -> String {
-        let cal = Calendar.current
-        let end = cal.date(byAdding: .day, value: 6, to: start) ?? start
-        let m = Date.FormatStyle().month(.abbreviated).day()
-        let dOnly = Date.FormatStyle().day()
-        // Same month → "Aug 10 – 16"; spanning → "Jul 27 – Aug 2".
-        if cal.isDate(start, equalTo: end, toGranularity: .month) {
-            return "\(start.formatted(m)) – \(end.formatted(dOnly))"
-        }
-        return "\(start.formatted(m)) – \(end.formatted(m))"
+        // Half-open [start, start+6d): the interval formatter renders the last
+        // included day, reading Mon–Sun in en and 8/10～8/16 in ja.
+        let lastDay = Calendar.current.date(byAdding: .day, value: 6, to: start) ?? start
+        return (start..<lastDay).formatted(.interval.month(.abbreviated).day())
     }
 }

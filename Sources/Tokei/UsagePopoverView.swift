@@ -18,13 +18,17 @@ struct UsagePopoverView: View {
                 BurnLine(burn: burn)
             }
             if !state.usage.unpricedModels.isEmpty {
-                Label("No pricing for: \(state.usage.unpricedModels.sorted().joined(separator: ", "))",
-                      systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
+                Label {
+                    Text("No pricing for: \(state.usage.unpricedModels.sorted().joined(separator: ", "))",
+                         bundle: .module)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle")
+                }
+                .font(.caption).foregroundStyle(.orange)
             }
             UpdateSection(state: state)
             Divider()
-            Button("Open Tokei…") { onOpenMainWindow() }
+            Button { onOpenMainWindow() } label: { Text("Open Tokei…", bundle: .module) }
                 .frame(maxWidth: .infinity)
         }
         .padding(14)
@@ -39,17 +43,17 @@ struct UsagePopoverView: View {
 
     private var header: some View {
         HStack {
-            Text("Tokei").font(.system(size: 13, weight: .bold))
+            Text(verbatim: "Tokei").font(.system(size: 13, weight: .bold))
             Spacer()
             if let stamp = state.lastRefreshed {
-                Text("Updated \(stamp.formatted(date: .omitted, time: .shortened))")
+                Text("Updated \(stamp.formatted(date: .omitted, time: .shortened))", bundle: .module)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Button { Task { await state.refresh(userInitiated: true) } } label: {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
-            .help("Refresh")
+            .help(loc("Refresh"))
         }
     }
 
@@ -60,9 +64,9 @@ struct UsagePopoverView: View {
         }
     }
 
-    private func costColumn(_ label: String, _ value: Decimal) -> some View {
+    private func costColumn(_ label: LocalizedStringKey, _ value: Decimal) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(label, bundle: .module).font(.caption).foregroundStyle(.secondary)
             Text(costString(value)).font(.system(size: 16, weight: .semibold)).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -83,21 +87,26 @@ private struct QuotaBars: View {
         case .available(let snapshot):
             bars(snapshot, stale: false)
         case .noCredentials:
-            errorCard("No credentials", "Sign in to Claude Code, then retry.")
+            errorCard("No credentials", detail: "Sign in to Claude Code, then retry.")
         case .tokenExpired:
-            errorCard("Session expired", "Quota can't be read. Re-authenticate in Claude Code, then retry.")
+            errorCard("Session expired", detail: "Quota can't be read. Re-authenticate in Claude Code, then retry.")
         case .accessDenied:
-            errorCard("Keychain access denied", "Approve the Keychain prompt to show quota.")
+            errorCard("Keychain access denied", detail: "Approve the Keychain prompt to show quota.")
         case .networkError(let message):
             if let stale = state.lastSnapshot {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("Offline — last snapshot at \(stale.fetchedAt.formatted(date: .omitted, time: .shortened))",
-                          systemImage: "wifi.slash")
-                        .font(.caption).foregroundStyle(.orange)
+                    Label {
+                        Text("Offline — last snapshot at \(stale.fetchedAt.formatted(date: .omitted, time: .shortened))",
+                             bundle: .module)
+                    } icon: {
+                        Image(systemName: "wifi.slash")
+                    }
+                    .font(.caption).foregroundStyle(.orange)
                     bars(stale, stale: true).opacity(0.55)
                 }
             } else {
-                errorCard("Offline", message)
+                // `message` is a raw diagnostic (e.g. "http(429)") — not localized.
+                errorCard("Offline", verbatimDetail: message)
             }
         }
     }
@@ -114,14 +123,26 @@ private struct QuotaBars: View {
         }
     }
 
-    private func errorCard(_ title: String, _ detail: String) -> some View {
+    private func errorCard(_ title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
+        errorCard(title) { Text(detail, bundle: .module) }
+    }
+
+    /// Variant for a raw, non-localizable detail string (e.g. an HTTP error).
+    private func errorCard(_ title: LocalizedStringKey, verbatimDetail: String) -> some View {
+        errorCard(title) { Text(verbatimDetail) }
+    }
+
+    private func errorCard<Detail: View>(_ title: LocalizedStringKey,
+                                         @ViewBuilder detail: () -> Detail) -> some View {
         VStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).font(.title3)
-            Text(title).font(.system(size: 13, weight: .semibold))
-            Text(detail).font(.caption).foregroundStyle(.secondary)
+            Text(title, bundle: .module).font(.system(size: 13, weight: .semibold))
+            detail().font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Retry") { Task { await state.refresh(userInitiated: true) } }
-                .controlSize(.small)
+            Button { Task { await state.refresh(userInitiated: true) } } label: {
+                Text("Retry", bundle: .module)
+            }
+            .controlSize(.small)
         }
         .frame(maxWidth: .infinity)
         .padding(12)
@@ -150,19 +171,19 @@ private struct QuotaBars: View {
     private func bar(_ bucket: QuotaBucket) -> some View {
         let status = QuotaStatus(utilization: bucket.utilization)
         let shown = mode.fraction(usedUtilization: bucket.utilization)
-        let word = mode == .remaining ? "remaining" : "used"
+        let pct = Int((shown * 100).rounded())
         return VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(bucketShortTitle(bucket.key)).font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Text("\(Int((shown * 100).rounded()))% \(word)")
+                Text(verbatim: String(format: loc(mode == .remaining ? "pct.remaining" : "pct.used"), pct))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(status == .healthy ? .primary : status.color)
             }
             ProgressView(value: shown)
                 .tint(status.color)
             if let reset = bucket.resetsAt {
-                Text("Resets \(reset.formatted(date: .omitted, time: .shortened)) · ")
+                Text("Resets \(reset.formatted(date: .omitted, time: .shortened)) · ", bundle: .module)
                     .font(.caption).foregroundStyle(.secondary)
                 + Text(reset, style: .relative).font(.caption).foregroundStyle(.secondary)
             }
@@ -178,9 +199,9 @@ private struct BurnLine: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "gauge.with.needle").font(.caption)
-            Text("Burning \(tokenString(burn.tokensPerHour)) tok/hr")
+            Text("Burning \(tokenString(burn.tokensPerHour)) tok/hr", bundle: .module)
             if let limit = burn.projectedLimit {
-                Text("· at this pace, limit ≈ \(limit.formatted(date: .omitted, time: .shortened))")
+                Text("· at this pace, limit ≈ \(limit.formatted(date: .omitted, time: .shortened))", bundle: .module)
             }
         }
         .font(.caption).foregroundStyle(.secondary)
@@ -200,24 +221,32 @@ private struct UpdateSection: View {
             EmptyView()
         case .available(let update):
             HStack {
-                Label("Version \(update.version) available", systemImage: "arrow.down.circle")
-                    .font(.callout)
+                Label {
+                    Text("Version \(update.version) available", bundle: .module)
+                } icon: {
+                    Image(systemName: "arrow.down.circle")
+                }
+                .font(.callout)
                 Spacer()
-                Button("Update") { Task { await state.installUpdate(update) } }
+                Button { Task { await state.installUpdate(update) } } label: {
+                    Text("Update", bundle: .module)
+                }
             }
             .controlSize(.small)
         case .installing:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Downloading update…").font(.callout).foregroundStyle(.secondary)
+                Text("Downloading update…", bundle: .module).font(.callout).foregroundStyle(.secondary)
             }
         case .failed(let message):
             VStack(alignment: .leading, spacing: 2) {
+                // `message` is a raw diagnostic from AppState.describe — not localized.
                 Label(message, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
-                Link("Download manually",
-                     destination: URL(string: "https://github.com/nhannt315/tokei/releases/latest")!)
-                    .font(.caption)
+                Link(destination: URL(string: "https://github.com/nhannt315/tokei/releases/latest")!) {
+                    Text("Download manually", bundle: .module)
+                }
+                .font(.caption)
             }
         }
     }

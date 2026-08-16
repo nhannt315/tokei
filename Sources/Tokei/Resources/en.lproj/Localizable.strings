@@ -1,0 +1,89 @@
+/* ===== Popover ===== */
+"Open Tokei…" = "Open Tokei…";
+"Refresh" = "Refresh";
+"Updated %@" = "Updated %@";
+"Today" = "Today";
+"This month" = "This month";
+"No pricing for: %@" = "No pricing for: %@";
+
+/* Quota bars */
+"Session" = "Session";
+"Week" = "Week";
+"Week · %@" = "Week · %@";
+"pct.remaining" = "%d%% remaining";
+"pct.used" = "%d%% used";
+"Resets %@ · " = "Resets %@ · ";
+
+/* Quota error/offline states */
+"No credentials" = "No credentials";
+"Sign in to Claude Code, then retry." = "Sign in to Claude Code, then retry.";
+"Session expired" = "Session expired";
+"Quota can't be read. Re-authenticate in Claude Code, then retry." = "Quota can't be read. Re-authenticate in Claude Code, then retry.";
+"Keychain access denied" = "Keychain access denied";
+"Approve the Keychain prompt to show quota." = "Approve the Keychain prompt to show quota.";
+"Offline" = "Offline";
+"Offline — last snapshot at %@" = "Offline — last snapshot at %@";
+"Retry" = "Retry";
+
+/* Burn line */
+"Burning %@ tok/hr" = "Burning %@ tok/hr";
+"· at this pace, limit ≈ %@" = "· at this pace, limit ≈ %@";
+
+/* Update section */
+"Version %@ available" = "Version %@ available";
+"Update" = "Update";
+"Downloading update…" = "Downloading update…";
+"Download manually" = "Download manually";
+
+/* ===== Main window: navigation ===== */
+"Overview" = "Overview";
+"Analytics" = "Analytics";
+"Settings" = "Settings";
+
+/* Overview */
+"This Month" = "This Month";
+"Breakdown" = "Breakdown";
+"CURRENT SESSION" = "CURRENT SESSION";
+"Consumed" = "Consumed";
+"pct.ofQuota" = "%d%% of quota";
+"Burn rate" = "Burn rate";
+"limit ≈ %@" = "limit ≈ %@";
+"idle" = "idle";
+"Remaining" = "Remaining";
+"Quota unavailable" = "Quota unavailable";
+
+/* Breakdown tables */
+"Model" = "Model";
+"Project" = "Project";
+"Tokens" = "Tokens";
+"Cost" = "Cost";
+"No usage" = "No usage";
+"Total" = "Total";
+
+/* Analytics */
+"No usage yet" = "No usage yet";
+"Charts appear after your first Claude Code session is recorded." = "Charts appear after your first Claude Code session is recorded.";
+"TOKENS PER DAY — THIS WEEK" = "TOKENS PER DAY — THIS WEEK";
+"WEEKLY COST — LAST 8 WEEKS" = "WEEKLY COST — LAST 8 WEEKS";
+
+/* Settings */
+"General" = "General";
+"Launch at login" = "Launch at login";
+"Menu Bar" = "Menu Bar";
+"Show quota as" = "Show quota as";
+"Used" = "Used";
+"menuBarHint.remaining" = "Menu bar and popover will show e.g. \"82% remaining\".";
+"menuBarHint.used" = "Menu bar and popover will show e.g. \"82% used\".";
+"Notifications" = "Notifications";
+"Quota alerts" = "Quota alerts";
+"quotaAlerts.hint" = "Notifies when the 5-hour session reaches 70% and 90% used.";
+"Appearance" = "Appearance";
+"System" = "System";
+"Light" = "Light";
+"Dark" = "Dark";
+"Language" = "Language";
+"Takes effect after relaunch." = "Takes effect after relaunch.";
+"Relaunch" = "Relaunch";
+
+/* ===== Menu-bar right-click menu ===== */
+"Quit Tokei" = "Quit Tokei";

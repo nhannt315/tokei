@@ -8,7 +8,7 @@ enum PercentageMode: String, CaseIterable {
     case remaining
     case used
 
-    var label: String { self == .remaining ? "Remaining" : "Used" }
+    var label: String { self == .remaining ? loc("Remaining") : loc("Used") }
 
     /// Convert a used-fraction (0…1) into the fraction to display.
     func fraction(usedUtilization u: Double) -> Double { self == .remaining ? 1 - u : u }

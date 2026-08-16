@@ -1,0 +1,89 @@
+/* ===== Popover ===== */
+"Open Tokei…" = "Tokei を開く…";
+"Refresh" = "更新";
+"Updated %@" = "%@ に更新";
+"Today" = "今日";
+"This month" = "今月";
+"No pricing for: %@" = "価格情報なし: %@";
+
+/* Quota bars */
+"Session" = "セッション";
+"Week" = "週";
+"Week · %@" = "週 · %@";
+"pct.remaining" = "残り %d%%";
+"pct.used" = "使用 %d%%";
+"Resets %@ · " = "%@ にリセット · ";
+
+/* Quota error/offline states */
+"No credentials" = "認証情報がありません";
+"Sign in to Claude Code, then retry." = "Claude Code にサインインしてから再試行してください。";
+"Session expired" = "セッションの有効期限が切れました";
+"Quota can't be read. Re-authenticate in Claude Code, then retry." = "使用量を取得できません。Claude Code で再認証してから再試行してください。";
+"Keychain access denied" = "キーチェーンへのアクセスが拒否されました";
+"Approve the Keychain prompt to show quota." = "使用量を表示するにはキーチェーンの許可が必要です。";
+"Offline" = "オフライン";
+"Offline — last snapshot at %@" = "オフライン — 最終取得 %@";
+"Retry" = "再試行";
+
+/* Burn line */
+"Burning %@ tok/hr" = "消費 %@ tok/時";
+"· at this pace, limit ≈ %@" = "· このペースだと上限は約 %@";
+
+/* Update section */
+"Version %@ available" = "バージョン %@ が利用可能";
+"Update" = "アップデート";
+"Downloading update…" = "アップデートをダウンロード中…";
+"Download manually" = "手動でダウンロード";
+
+/* ===== Main window: navigation ===== */
+"Overview" = "概要";
+"Analytics" = "分析";
+"Settings" = "設定";
+
+/* Overview */
+"This Month" = "今月";
+"Breakdown" = "内訳";
+"CURRENT SESSION" = "現在のセッション";
+"Consumed" = "消費量";
+"pct.ofQuota" = "上限の %d%%";
+"Burn rate" = "消費レート";
+"limit ≈ %@" = "上限は約 %@";
+"idle" = "待機中";
+"Remaining" = "残り";
+"Quota unavailable" = "使用量を取得できません";
+
+/* Breakdown tables */
+"Model" = "モデル";
+"Project" = "プロジェクト";
+"Tokens" = "トークン";
+"Cost" = "コスト";
+"No usage" = "使用なし";
+"Total" = "合計";
+
+/* Analytics */
+"No usage yet" = "まだ使用がありません";
+"Charts appear after your first Claude Code session is recorded." = "最初の Claude Code セッションが記録されるとグラフが表示されます。";
+"TOKENS PER DAY — THIS WEEK" = "日別トークン — 今週";
+"WEEKLY COST — LAST 8 WEEKS" = "週別コスト — 直近 8 週間";
+
+/* Settings */
+"General" = "一般";
+"Launch at login" = "ログイン時に起動";
+"Menu Bar" = "メニューバー";
+"Show quota as" = "使用量の表示";
+"Used" = "使用";
+"menuBarHint.remaining" = "メニューバーとポップオーバーに「残り 82%」のように表示されます。";
+"menuBarHint.used" = "メニューバーとポップオーバーに「使用 82%」のように表示されます。";
+"Notifications" = "通知";
+"Quota alerts" = "使用量アラート";
+"quotaAlerts.hint" = "5時間セッションの使用量が 70% と 90% に達したときに通知します。";
+"Appearance" = "外観";
+"System" = "システムに合わせる";
+"Light" = "ライト";
+"Dark" = "ダーク";
+"Language" = "言語";
+"Takes effect after relaunch." = "再起動後に反映されます。";
+"Relaunch" = "再起動";
+
+/* ===== Menu-bar right-click menu ===== */
+"Quit Tokei" = "Tokei を終了";

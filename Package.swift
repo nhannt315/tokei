@@ -7,10 +7,12 @@ import PackageDescription
 // stripped in release).
 let package = Package(
     name: "Tokei",
+    defaultLocalization: "en",
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "TrackerCore", resources: [.copy("Resources/DefaultPricing.json")]),
-        .executableTarget(name: "Tokei", dependencies: ["TrackerCore"]),
+        .executableTarget(name: "Tokei", dependencies: ["TrackerCore"],
+                          resources: [.process("Resources")]),
         .executableTarget(name: "TrackerCLI", dependencies: ["TrackerCore"]),
         .executableTarget(name: "TrackerCoreDemo", dependencies: ["TrackerCore"]),
     ]
