@@ -10,11 +10,12 @@ import SwiftUI
 /// removal`, and the accessory app quits ~180ms in. Owning the NSStatusItem
 /// here (strong property, lives as long as the delegate) sidesteps that gap.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let state = AppState()
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
     private var refreshTimer: Timer?
+    private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -34,7 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderLabel()
 
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: UsagePopoverView(state: state))
+        popover.contentViewController = NSHostingController(
+            rootView: UsagePopoverView(state: state) { [weak self] in self?.showSettings() })
 
         // Poll the label off AppState. A plain timer avoids re-arming Observation
         // tracking on the status item, which flickered the icon on each update.
@@ -64,6 +66,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Show a settings window. SwiftUI's `Settings` scene does not surface reliably
+    /// from an `.accessory` app on macOS 26 (`showSettingsWindow:` promotes the app
+    /// but opens no window), so we own a plain `NSWindow` hosting `SettingsView`.
+    /// The app promotes to `.regular` while it is open so the window can take focus,
+    /// and drops back to `.accessory` on close to leave no lingering Dock icon.
+    @objc func showSettings() {
+        popover.close()
+        NSApp.setActivationPolicy(.regular)
+
+        if settingsWindow == nil {
+            let window = NSWindow(
+                contentRect: .zero,
+                styleMask: [.titled, .closable],
+                backing: .buffered,
+                defer: false)
+            window.title = "Settings"
+            window.contentViewController = NSHostingController(rootView: SettingsView())
+            window.isReleasedWhenClosed = false
+            window.delegate = self
+            window.center()
+            settingsWindow = window
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard (notification.object as? NSWindow) === settingsWindow else { return }
+        NSApp.setActivationPolicy(.accessory)
+    }
 }
 
 @main
@@ -71,6 +105,6 @@ struct TokeiApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        Settings { EmptyView() }
+        Settings { SettingsView() }
     }
 }

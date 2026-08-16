@@ -4,6 +4,7 @@ import TrackerCore
 
 struct UsagePopoverView: View {
     let state: AppState
+    let onOpenSettings: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -14,7 +15,7 @@ struct UsagePopoverView: View {
             MonthSection(usage: state.usage)
             Divider()
             UpdateSection(state: state)
-            FooterSection(state: state)
+            FooterSection(state: state, onOpenSettings: onOpenSettings)
         }
         .padding(12)
         .frame(width: 320)
@@ -26,6 +27,9 @@ struct UsagePopoverView: View {
 
 private struct QuotaSection: View {
     let state: AppState
+    @AppStorage(PercentageMode.defaultsKey) private var percentageModeRaw = PercentageMode.remaining.rawValue
+
+    private var mode: PercentageMode { PercentageMode(rawValue: percentageModeRaw) ?? .remaining }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -59,15 +63,16 @@ private struct QuotaSection: View {
 
     private func bars(_ snapshot: QuotaSnapshot) -> some View {
         ForEach(snapshot.buckets, id: \.key) { bucket in
+            let shown = mode.fraction(usedUtilization: bucket.utilization)
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(Self.title(bucket.key))
                     Spacer()
-                    Text("\(Int((bucket.utilization * 100).rounded()))% used")
+                    Text("\(Int((shown * 100).rounded()))% \(mode == .remaining ? "left" : "used")")
                         .foregroundStyle(bucket.utilization > 0.9 ? .red : .secondary)
                 }
                 .font(.callout)
-                ProgressView(value: bucket.utilization)
+                ProgressView(value: shown)
                 if let reset = bucket.resetsAt {
                     Text("resets in ") .font(.caption).foregroundStyle(.secondary)
                     + Text(reset, style: .relative).font(.caption).foregroundStyle(.secondary)
@@ -188,6 +193,7 @@ private struct UpdateSection: View {
 
 private struct FooterSection: View {
     let state: AppState
+    let onOpenSettings: () -> Void
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
 
@@ -219,6 +225,7 @@ private struct FooterSection: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button("Settings…") { onOpenSettings() }
                 Button("Refresh") { Task { await state.refresh(userInitiated: true) } }
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }

@@ -185,11 +185,12 @@ final class AppState {
         }
     }
 
-    /// Label text: remaining session quota, else today's cost, else placeholder.
+    /// Label text: session quota (remaining or used per setting), else today's cost, else placeholder.
     var menuBarText: String {
         if case .available(let snapshot) = quota,
            let session = snapshot.buckets.first {
-            return "\(Int(((1 - session.utilization) * 100).rounded()))%"
+            let pct = PercentageMode.current.fraction(usedUtilization: session.utilization)
+            return "\(Int((pct * 100).rounded()))%"
         }
         if usage.todayTotal > 0 { return costString(usage.todayTotal) }
         return "LLM"
