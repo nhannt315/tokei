@@ -79,7 +79,7 @@ private struct OverviewPane: View {
                 SessionCard(state: state)
 
                 HStack {
-                    Text("Breakdown", bundle: .module).font(.system(size: 13, weight: .semibold))
+                    Text("Breakdown", bundle: .l10n).font(.system(size: 13, weight: .semibold))
                     Spacer()
                     Picker("", selection: $scope) {
                         ForEach(Scope.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -114,11 +114,11 @@ private struct SessionCard: View {
                 let status = QuotaStatus(utilization: bucket.utilization)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("CURRENT SESSION", bundle: .module)
+                        Text("CURRENT SESSION", bundle: .l10n)
                             .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
                         Spacer()
                         if let reset = bucket.resetsAt {
-                            (Text("Resets \(reset.formatted(date: .omitted, time: .shortened)) · ", bundle: .module)
+                            (Text("Resets \(reset.formatted(date: .omitted, time: .shortened)) · ", bundle: .l10n)
                              + Text(reset, style: .relative))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
@@ -132,13 +132,13 @@ private struct SessionCard: View {
                         if let burn = state.burn {
                             stat("Burn rate", tokenString(burn.tokensPerHour) + " tok/hr") {
                                 if let limit = burn.projectedLimit {
-                                    Text("limit ≈ \(limit.formatted(date: .omitted, time: .shortened))", bundle: .module)
+                                    Text("limit ≈ \(limit.formatted(date: .omitted, time: .shortened))", bundle: .l10n)
                                 } else {
                                     Text(verbatim: "—")
                                 }
                             }
                         } else {
-                            stat("Burn rate", "—") { Text("idle", bundle: .module) }
+                            stat("Burn rate", "—") { Text("idle", bundle: .l10n) }
                         }
                         stat("Remaining", "\(Int(((1 - bucket.utilization) * 100).rounded()))%") {
                             Text(verbatim: "")
@@ -146,7 +146,7 @@ private struct SessionCard: View {
                     }
                 }
             } else {
-                Text("Quota unavailable", bundle: .module).foregroundStyle(.secondary)
+                Text("Quota unavailable", bundle: .l10n).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -157,7 +157,7 @@ private struct SessionCard: View {
     private func stat<Sub: View>(_ label: LocalizedStringKey, _ value: String,
                                  @ViewBuilder sub: () -> Sub) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label, bundle: .module).font(.caption).foregroundStyle(.secondary)
+            Text(label, bundle: .l10n).font(.caption).foregroundStyle(.secondary)
             Text(verbatim: value).font(.system(size: 17, weight: .semibold)).monospacedDigit()
             sub().font(.caption).foregroundStyle(.secondary)
         }
@@ -198,13 +198,13 @@ private struct BreakdownTable: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header cells localize; the name column shows the column title.
-            gridRow(name: Text(header, bundle: .module),
-                    tokens: Text("Tokens", bundle: .module),
-                    cost: Text("Cost", bundle: .module),
+            gridRow(name: Text(header, bundle: .l10n),
+                    tokens: Text("Tokens", bundle: .l10n),
+                    cost: Text("Cost", bundle: .l10n),
                     weight: .semibold, style: AnyShapeStyle(.secondary))
             Divider()
             if rows.isEmpty {
-                Text("No usage", bundle: .module).font(.caption).foregroundStyle(.secondary)
+                Text("No usage", bundle: .l10n).font(.caption).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity).padding(.vertical, 10)
             } else {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { i, r in
@@ -215,7 +215,7 @@ private struct BreakdownTable: View {
                             alt: i.isMultiple(of: 2) == false)
                 }
                 Divider()
-                gridRow(name: Text("Total", bundle: .module),
+                gridRow(name: Text("Total", bundle: .l10n),
                         tokens: Text(verbatim: ""),
                         cost: Text(verbatim: costString(total)),
                         weight: .semibold)
@@ -262,40 +262,40 @@ struct SettingsPane: View {
         Form {
             if bundled {
                 Section {
-                    Toggle(isOn: $launchAtLogin) { Text("Launch at login", bundle: .module) }
+                    Toggle(isOn: $launchAtLogin) { Text("Launch at login", bundle: .l10n) }
                         .onChange(of: launchAtLogin) { _, enabled in setLaunch(enabled) }
                     if let loginError {
                         // System error text — not localized by us.
                         Text(loginError).font(.caption).foregroundStyle(.orange)
                     }
                     languageRow
-                } header: { Text("General", bundle: .module) }
+                } header: { Text("General", bundle: .l10n) }
             }
             Section {
                 Picker(selection: $mode) {
                     ForEach(PercentageMode.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-                } label: { Text("Show quota as", bundle: .module) }
+                } label: { Text("Show quota as", bundle: .l10n) }
                 .pickerStyle(.segmented)
                 // Built via loc() (not a Text LocalizedStringKey) so the literal
                 // "%" in the example isn't parsed as a format specifier.
                 Text(verbatim: currentMode == .remaining
                      ? loc("menuBarHint.remaining") : loc("menuBarHint.used"))
                     .font(.caption).foregroundStyle(.secondary)
-            } header: { Text("Menu Bar", bundle: .module) }
+            } header: { Text("Menu Bar", bundle: .l10n) }
             Section {
                 Picker(selection: $appearance) {
                     ForEach(AppearanceMode.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
-                } label: { Text("Appearance", bundle: .module) }
+                } label: { Text("Appearance", bundle: .l10n) }
                 .pickerStyle(.segmented)
                 .onChange(of: appearance) { _, _ in
                     NotificationCenter.default.post(name: AppearanceMode.didChange, object: nil)
                 }
-            } header: { Text("Appearance", bundle: .module) }
+            } header: { Text("Appearance", bundle: .l10n) }
             Section {
-                Toggle(isOn: $alertsEnabled) { Text("Quota alerts", bundle: .module) }
+                Toggle(isOn: $alertsEnabled) { Text("Quota alerts", bundle: .l10n) }
                 Text(verbatim: loc("quotaAlerts.hint"))
                     .font(.caption).foregroundStyle(.secondary)
-            } header: { Text("Notifications", bundle: .module) }
+            } header: { Text("Notifications", bundle: .l10n) }
         }
         .formStyle(.grouped)
         .frame(maxWidth: 560)
@@ -306,18 +306,18 @@ struct SettingsPane: View {
     @ViewBuilder private var languageRow: some View {
         Picker(selection: $language) {
             ForEach(LanguageChoice.allCases, id: \.self) { Text($0.label).tag($0) }
-        } label: { Text("Language", bundle: .module) }
+        } label: { Text("Language", bundle: .l10n) }
         .onChange(of: language) { _, choice in
             choice.apply()
             languageChanged = true
         }
         if languageChanged {
             HStack {
-                Text("Takes effect after relaunch.", bundle: .module)
+                Text("Takes effect after relaunch.", bundle: .l10n)
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if bundled {
-                    Button { relaunch() } label: { Text("Relaunch", bundle: .module) }
+                    Button { relaunch() } label: { Text("Relaunch", bundle: .l10n) }
                         .controlSize(.small)
                 }
             }

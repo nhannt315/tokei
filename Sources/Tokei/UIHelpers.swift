@@ -1,10 +1,27 @@
 import SwiftUI
 import TrackerCore
 
-/// Localized string from this module's bundle. SwiftPM puts localized `.strings`
-/// in `Bundle.module` (not `.main`), so every non-SwiftUI lookup must name it.
-/// SwiftUI `Text` sites pass `bundle: .module` directly instead.
-func loc(_ key: String.LocalizationValue) -> String { String(localized: key, bundle: .module) }
+extension Bundle {
+    /// Bundle holding the localized `.strings`. We do NOT use `Bundle.module`
+    /// here: for an executable target SwiftPM's generated accessor resolves
+    /// against a path baked in at build time (the CI runner's `.build`
+    /// directory) and `fatalError`s when it's absent — crashing the app on any
+    /// machine that isn't the build host. In a packaged `.app` the SwiftPM
+    /// resource bundle sits next to the other resources, so resolve it from
+    /// `Bundle.main.resourceURL`; fall back to `.module` for `swift run`/dev
+    /// layouts where that copy doesn't exist.
+    static let l10n: Bundle = {
+        if let url = Bundle.main.resourceURL?.appendingPathComponent("Tokei_Tokei.bundle"),
+           let bundle = Bundle(url: url) {
+            return bundle
+        }
+        return .module
+    }()
+}
+
+/// Localized string from the localization bundle. SwiftUI `Text` sites pass
+/// `bundle: .l10n` directly instead.
+func loc(_ key: String.LocalizationValue) -> String { String(localized: key, bundle: .l10n) }
 
 /// Quota status → bar/label tint. Green healthy, orange ≥70% used, red ≥90%.
 enum QuotaStatus {
@@ -39,7 +56,7 @@ func bucketShortTitle(_ key: String) -> String {
     case "seven_day", "weekly_all": return loc("Week")
     default:
         if key.contains(":"), let name = key.split(separator: ":").last {
-            return String(localized: "Week · \(String(name))", bundle: .module)
+            return String(localized: "Week · \(String(name))", bundle: .l10n)
         }
         return key
     }

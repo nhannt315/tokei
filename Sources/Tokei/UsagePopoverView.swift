@@ -20,7 +20,7 @@ struct UsagePopoverView: View {
             if !state.usage.unpricedModels.isEmpty {
                 Label {
                     Text("No pricing for: \(state.usage.unpricedModels.sorted().joined(separator: ", "))",
-                         bundle: .module)
+                         bundle: .l10n)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle")
                 }
@@ -28,7 +28,7 @@ struct UsagePopoverView: View {
             }
             UpdateSection(state: state)
             Divider()
-            Button { onOpenMainWindow() } label: { Text("Open Tokei…", bundle: .module) }
+            Button { onOpenMainWindow() } label: { Text("Open Tokei…", bundle: .l10n) }
                 .frame(maxWidth: .infinity)
         }
         .padding(14)
@@ -46,7 +46,7 @@ struct UsagePopoverView: View {
             Text(verbatim: "Tokei").font(.system(size: 13, weight: .bold))
             Spacer()
             if let stamp = state.lastRefreshed {
-                Text("Updated \(stamp.formatted(date: .omitted, time: .shortened))", bundle: .module)
+                Text("Updated \(stamp.formatted(date: .omitted, time: .shortened))", bundle: .l10n)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Button { Task { await state.refresh(userInitiated: true) } } label: {
@@ -66,7 +66,7 @@ struct UsagePopoverView: View {
 
     private func costColumn(_ label: LocalizedStringKey, _ value: Decimal) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label, bundle: .module).font(.caption).foregroundStyle(.secondary)
+            Text(label, bundle: .l10n).font(.caption).foregroundStyle(.secondary)
             Text(costString(value)).font(.system(size: 16, weight: .semibold)).monospacedDigit()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -97,7 +97,7 @@ private struct QuotaBars: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Label {
                         Text("Offline — last snapshot at \(stale.fetchedAt.formatted(date: .omitted, time: .shortened))",
-                             bundle: .module)
+                             bundle: .l10n)
                     } icon: {
                         Image(systemName: "wifi.slash")
                     }
@@ -124,7 +124,7 @@ private struct QuotaBars: View {
     }
 
     private func errorCard(_ title: LocalizedStringKey, detail: LocalizedStringKey) -> some View {
-        errorCard(title) { Text(detail, bundle: .module) }
+        errorCard(title) { Text(detail, bundle: .l10n) }
     }
 
     /// Variant for a raw, non-localizable detail string (e.g. an HTTP error).
@@ -136,11 +136,11 @@ private struct QuotaBars: View {
                                          @ViewBuilder detail: () -> Detail) -> some View {
         VStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).font(.title3)
-            Text(title, bundle: .module).font(.system(size: 13, weight: .semibold))
+            Text(title, bundle: .l10n).font(.system(size: 13, weight: .semibold))
             detail().font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Button { Task { await state.refresh(userInitiated: true) } } label: {
-                Text("Retry", bundle: .module)
+                Text("Retry", bundle: .l10n)
             }
             .controlSize(.small)
         }
@@ -183,7 +183,7 @@ private struct QuotaBars: View {
             ProgressView(value: shown)
                 .tint(status.color)
             if let reset = bucket.resetsAt {
-                Text("Resets \(reset.formatted(date: .omitted, time: .shortened)) · ", bundle: .module)
+                Text("Resets \(reset.formatted(date: .omitted, time: .shortened)) · ", bundle: .l10n)
                     .font(.caption).foregroundStyle(.secondary)
                 + Text(reset, style: .relative).font(.caption).foregroundStyle(.secondary)
             }
@@ -199,9 +199,9 @@ private struct BurnLine: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "gauge.with.needle").font(.caption)
-            Text("Burning \(tokenString(burn.tokensPerHour)) tok/hr", bundle: .module)
+            Text("Burning \(tokenString(burn.tokensPerHour)) tok/hr", bundle: .l10n)
             if let limit = burn.projectedLimit {
-                Text("· at this pace, limit ≈ \(limit.formatted(date: .omitted, time: .shortened))", bundle: .module)
+                Text("· at this pace, limit ≈ \(limit.formatted(date: .omitted, time: .shortened))", bundle: .l10n)
             }
         }
         .font(.caption).foregroundStyle(.secondary)
@@ -222,21 +222,21 @@ private struct UpdateSection: View {
         case .available(let update):
             HStack {
                 Label {
-                    Text("Version \(update.version) available", bundle: .module)
+                    Text("Version \(update.version) available", bundle: .l10n)
                 } icon: {
                     Image(systemName: "arrow.down.circle")
                 }
                 .font(.callout)
                 Spacer()
                 Button { Task { await state.installUpdate(update) } } label: {
-                    Text("Update", bundle: .module)
+                    Text("Update", bundle: .l10n)
                 }
             }
             .controlSize(.small)
         case .installing:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Downloading update…", bundle: .module).font(.callout).foregroundStyle(.secondary)
+                Text("Downloading update…", bundle: .l10n).font(.callout).foregroundStyle(.secondary)
             }
         case .failed(let message):
             VStack(alignment: .leading, spacing: 2) {
@@ -244,7 +244,7 @@ private struct UpdateSection: View {
                 Label(message, systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
                 Link(destination: URL(string: "https://github.com/nhannt315/tokei/releases/latest")!) {
-                    Text("Download manually", bundle: .module)
+                    Text("Download manually", bundle: .l10n)
                 }
                 .font(.caption)
             }

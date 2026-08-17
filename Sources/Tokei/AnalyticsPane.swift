@@ -10,9 +10,9 @@ struct AnalyticsPane: View {
     var body: some View {
         if usage.eventCount == 0 {
             ContentUnavailableView {
-                Label { Text("No usage yet", bundle: .module) } icon: { Image(systemName: "chart.bar.xaxis") }
+                Label { Text("No usage yet", bundle: .l10n) } icon: { Image(systemName: "chart.bar.xaxis") }
             } description: {
-                Text("Charts appear after your first Claude Code session is recorded.", bundle: .module)
+                Text("Charts appear after your first Claude Code session is recorded.", bundle: .l10n)
             }
         } else {
             ScrollView {
@@ -36,7 +36,7 @@ private struct TokensPerDayChart: View {
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                Text("TOKENS PER DAY — THIS WEEK", bundle: .module)
+                Text("TOKENS PER DAY — THIS WEEK", bundle: .l10n)
                     .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
                 Chart(days) { d in
                     BarMark(x: .value("Day", d.day, unit: .day),
@@ -68,7 +68,7 @@ private struct WeeklyCostChart: View {
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                Text("WEEKLY COST — LAST 8 WEEKS", bundle: .module)
+                Text("WEEKLY COST — LAST 8 WEEKS", bundle: .l10n)
                     .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
                 Chart(weeks) { w in
                     BarMark(x: .value("Week", w.weekStart, unit: .weekOfYear),
@@ -103,9 +103,9 @@ private struct WeeklyRollupTable: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("Week", bundle: .module).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
-            Text("Tokens", bundle: .module).frame(width: 52, alignment: .trailing)
-            Text("Cost", bundle: .module).frame(width: 52, alignment: .trailing)
+            Text("Week", bundle: .l10n).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
+            Text("Tokens", bundle: .l10n).frame(width: 52, alignment: .trailing)
+            Text("Cost", bundle: .l10n).frame(width: 52, alignment: .trailing)
         }
         .font(.caption).fontWeight(.semibold).foregroundStyle(.secondary)
         .padding(.horizontal, 12).padding(.vertical, 7)
