@@ -208,6 +208,35 @@ codesign -d -r- /tmp/rel/out/Tokei.app | grep 'designated =>'
 codesign --verify --verbose /tmp/rel/out/Tokei.app
 ```
 
+### Test the CI artifact, not your local build — with the SwiftPM build dir hidden
+
+A locally-built `.app` always has the package's build directory sitting next to
+it on disk, so any SwiftPM resource-bundle accessor that falls back to a
+build-time-baked path resolves fine — and masks failures that hit every other
+Mac. This shipped a crash once (v0.1.5): the executable target's `Bundle.module`
+accessor `fatalError`ed on user machines because the baked path was the CI
+runner's build dir. The app launched, then died the moment a localized string
+rendered.
+
+Two guards, both cheap:
+
+```sh
+# 1. The binary must not depend on the baked path at runtime. Our code resolves
+#    localized strings from Bundle.main.resourceURL (see Bundle.l10n in
+#    UIHelpers.swift), NOT Bundle.module. Confirm no NEW code reintroduces it.
+# 2. Prove it: run the DOWNLOADED release with the local build dir renamed away,
+#    so the baked fallback cannot resolve — this mimics a clean user Mac.
+mv .build .build_hidden
+open /tmp/rel/out/Tokei.app; sleep 3
+osascript -e 'tell application "System Events" to tell process "Tokei" \
+  to perform action "AXPress" of menu bar item 1 of menu bar 2'   # open the popover
+sleep 2; pgrep -x Tokei || echo "CRASHED — resource bundle not resolving"
+pkill -x Tokei; mv .build_hidden .build
+```
+
+Anything that reads a resource (localization, pricing snapshot) is subject to
+this. Never validate a release only from `bundle.sh` output on the dev machine.
+
 ## Checks
 
 Core logic (version compare, release decode, zip-asset selection) is covered in
