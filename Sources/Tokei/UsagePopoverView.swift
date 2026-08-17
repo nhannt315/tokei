@@ -58,16 +58,22 @@ struct UsagePopoverView: View {
     }
 
     private var costPair: some View {
-        HStack(spacing: 0) {
-            costColumn("Today", state.usage.todayTotal)
-            costColumn("This month", state.usage.monthTotal)
+        HStack(alignment: .top, spacing: 12) {
+            costColumn("Today", state.usage.todayTotal, models: state.usage.todayRows)
+            costColumn("This month", state.usage.monthTotal, models: state.usage.monthRows)
         }
     }
 
-    private func costColumn(_ label: LocalizedStringKey, _ value: Decimal) -> some View {
+    /// A timeframe column: heading, total, then its top-3 (+other) models.
+    private func costColumn(_ label: LocalizedStringKey, _ value: Decimal,
+                            models: [ModelCostRow]) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label, bundle: .l10n).font(.caption).foregroundStyle(.secondary)
             Text(costString(value)).font(.system(size: 16, weight: .semibold)).monospacedDigit()
+            if !models.isEmpty {
+                ModelColumn(rows: models)
+                    .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -188,6 +194,43 @@ private struct QuotaBars: View {
                 + Text(reset, style: .relative).font(.caption).foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+// MARK: - Per-model column
+
+/// One timeframe's per-model rows (model name + cost), shown beneath its cost
+/// total. Capped at the 3 costliest; the rest collapse into one "other (N)"
+/// row so the popover stays compact. Narrow column → name + cost only.
+private struct ModelColumn: View {
+    let rows: [ModelCostRow]
+    private static let visible = 3
+
+    var body: some View {
+        VStack(spacing: 3) {
+            ForEach(capped) { row in
+                HStack(spacing: 6) {
+                    Text(verbatim: row.model)
+                        .lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(verbatim: costString(row.cost))
+                        .monospacedDigit()
+                }
+            }
+        }
+        .font(.caption).foregroundStyle(.secondary)
+    }
+
+    /// Top-3 by cost (rows arrive cost-sorted) + a merged "other (N)" row.
+    private struct Line: Identifiable { let id: String; let model: String; let cost: Decimal }
+    private var capped: [Line] {
+        let head = rows.prefix(Self.visible).map {
+            Line(id: $0.model, model: RowBuilder.displayName($0.model), cost: $0.cost)
+        }
+        let rest = rows.dropFirst(Self.visible)
+        guard !rest.isEmpty else { return head }
+        let otherCost = rest.reduce(Decimal(0)) { $0 + $1.cost }
+        return head + [Line(id: "__other", model: "other (\(rest.count))", cost: otherCost)]
     }
 }
 
