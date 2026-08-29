@@ -55,31 +55,108 @@ func scannedEvents() -> [UsageEvent] {
     return store.events
 }
 
+// MARK: - JSON output (--json)
+
+// Lossless Decimal → string; do NOT bridge through Double.
+func decimalString(_ d: Decimal) -> String { NSDecimalNumber(decimal: d).description }
+
+struct ModelJSON: Encodable {
+    let model: String
+    let input: Int
+    let output: Int
+    let cacheRead: Int
+    let cacheCreate5m: Int
+    let cacheCreate1h: Int
+    let tokens: Int
+    let cost: String
+}
+
+struct ScopeJSON: Encodable {
+    let scope: String
+    let date: String
+    let models: [ModelJSON]
+    let totalCost: String
+    let unpricedModels: [String]
+}
+
+struct QuotaBucketJSON: Encodable {
+    let key: String
+    let utilizationPct: Double
+    let resetsAt: String?
+}
+
+func emitJSON<T: Encodable>(_ v: T) {
+    let enc = JSONEncoder()
+    enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+    if let data = try? enc.encode(v), let s = String(data: data, encoding: .utf8) {
+        print(s)
+    }
+}
+
+// Build a JSON scope document from raw byModel totals. Drops synthetic models,
+// matching the table path.
+func scopeJSON(_ scope: String, date: String, byModel: [String: TokenTotals],
+               calc: inout CostCalculator) -> ScopeJSON {
+    var models: [ModelJSON] = []
+    var total: Decimal = 0
+    for (model, t) in byModel.sorted(by: { $0.key < $1.key }) where !CostCalculator.isSynthetic(model) {
+        let cost = calc.cost(model: model, totals: t)
+        total += cost
+        models.append(ModelJSON(
+            model: model, input: t.input, output: t.output, cacheRead: t.cacheRead,
+            cacheCreate5m: t.cacheCreate5m, cacheCreate1h: t.cacheCreate1h,
+            tokens: t.total, cost: decimalString(cost)))
+    }
+    return ScopeJSON(scope: scope, date: date, models: models,
+                     totalCost: decimalString(total),
+                     unpricedModels: calc.unpricedModels.sorted())
+}
+
+let isoDay: DateFormatter = {
+    let df = DateFormatter()
+    df.dateFormat = "yyyy-MM-dd"
+    return df
+}()
+
 let args = CommandLine.arguments.dropFirst()
 let command = args.first ?? "today"
+let json = args.contains("--json")
 
 switch command {
 case "today":
     var calc = loadCalculator()
-    print("Today (\(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .none)), local time)")
-    printModelTable(UsageAggregator().today(scannedEvents()), calc: &calc)
+    let byModel = UsageAggregator().today(scannedEvents())
+    if json {
+        emitJSON(scopeJSON("today", date: isoDay.string(from: Date()), byModel: byModel, calc: &calc))
+    } else {
+        print("Today (\(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .none)), local time)")
+        printModelTable(byModel, calc: &calc)
+    }
 
 case "month":
     var calc = loadCalculator()
-    print("This month (local time)")
-    printModelTable(UsageAggregator().thisMonth(scannedEvents()), calc: &calc)
+    let byModel = UsageAggregator().thisMonth(scannedEvents())
+    if json {
+        emitJSON(scopeJSON("month", date: isoDay.string(from: Date()), byModel: byModel, calc: &calc))
+    } else {
+        print("This month (local time)")
+        printModelTable(byModel, calc: &calc)
+    }
 
 case "daily":
-    let days = Int(args.dropFirst().first ?? "7") ?? 7
+    let days = Int(args.dropFirst().first(where: { !$0.hasPrefix("--") }) ?? "7") ?? 7
     var calc = loadCalculator()
     let byDay = UsageAggregator().byDayModel(scannedEvents())
-    let df = DateFormatter()
-    df.dateFormat = "yyyy-MM-dd"
     let cutoff = Calendar.current.date(byAdding: .day, value: -(days - 1),
                                        to: Calendar.current.startOfDay(for: Date()))!
-    for (day, models) in byDay.sorted(by: { $0.key < $1.key }) where day >= cutoff {
-        print("\n=== \(df.string(from: day)) ===")
-        printModelTable(models, calc: &calc)
+    let sortedDays = byDay.sorted(by: { $0.key < $1.key }).filter { $0.key >= cutoff }
+    if json {
+        emitJSON(sortedDays.map { scopeJSON("daily", date: isoDay.string(from: $0.key), byModel: $0.value, calc: &calc) })
+    } else {
+        for (day, models) in sortedDays {
+            print("\n=== \(isoDay.string(from: day)) ===")
+            printModelTable(models, calc: &calc)
+        }
     }
 
 case "quota":
@@ -106,6 +183,14 @@ case "quota":
         } else {
             switch await QuotaClient().fetch(token: token) {
             case .success(let snapshot):
+                if json {
+                    let iso = ISO8601DateFormatter()
+                    emitJSON(snapshot.buckets.map {
+                        QuotaBucketJSON(key: $0.key, utilizationPct: $0.utilization * 100,
+                                        resetsAt: $0.resetsAt.map { iso.string(from: $0) })
+                    })
+                    break
+                }
                 let df = DateFormatter()
                 df.dateStyle = .medium
                 df.timeStyle = .short
@@ -135,6 +220,6 @@ case "scan":
         + String(format: "%.3fs", warm.elapsed))
 
 default:
-    print("usage: TrackerCLI <today|month|daily [n]|quota [--raw]|scan>")
+    print("usage: TrackerCLI <today|month|daily [n]|quota|scan> [--json]  (quota also: --raw)")
     exit(64)
 }
