@@ -248,6 +248,7 @@ private struct BreakdownTable: View {
 
 struct SettingsPane: View {
     @AppStorage(PercentageMode.defaultsKey) private var mode = PercentageMode.remaining.rawValue
+    @AppStorage(MenuBarMode.defaultsKey) private var menuBarMode = MenuBarMode.quota.rawValue
     @AppStorage("quotaAlertsEnabled") private var alertsEnabled = true
     @AppStorage(AppearanceMode.defaultsKey) private var appearance = AppearanceMode.system.rawValue
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -272,6 +273,10 @@ struct SettingsPane: View {
                 } header: { Text("General", bundle: .l10n) }
             }
             Section {
+                Picker(selection: $menuBarMode) {
+                    ForEach(MenuBarMode.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+                } label: { Text("Menu bar shows", bundle: .l10n) }
+                .pickerStyle(.segmented)
                 Picker(selection: $mode) {
                     ForEach(PercentageMode.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
                 } label: { Text("Show quota as", bundle: .l10n) }

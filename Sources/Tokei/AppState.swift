@@ -284,15 +284,29 @@ final class AppState {
         }
     }
 
-    /// Label text: session quota (remaining or used per setting), else today's cost, else placeholder.
+    /// Label text, per the user's MenuBarMode choice. Each mode keeps the same
+    /// fallback chain (primary datum → today's cost → "LLM") so the label is
+    /// never blank. Re-read every 2s by the status item's render timer, so a
+    /// mode change takes effect without a restart.
     var menuBarText: String {
-        if case .available(let snapshot) = quota,
-           let session = snapshot.sessionBucket {
-            let pct = PercentageMode.current.fraction(usedUtilization: session.utilization)
-            return "\(Int((pct * 100).rounded()))%"
+        switch MenuBarMode.current {
+        case .quota:
+            if let pct = quotaPercent { return "\(pct)%" }
+        case .cost:
+            if usage.todayTotal > 0 { return costString(usage.todayTotal) }
+        case .burn:
+            if let rate = burn?.tokensPerHour { return tokenString(rate) + "/h" }
         }
         if usage.todayTotal > 0 { return costString(usage.todayTotal) }
         return "LLM"
+    }
+
+    /// Session quota as a whole-number percent (remaining or used per setting),
+    /// or nil when no quota snapshot is available.
+    private var quotaPercent: Int? {
+        guard case .available(let snapshot) = quota, let session = snapshot.sessionBucket else { return nil }
+        let pct = PercentageMode.current.fraction(usedUtilization: session.utilization)
+        return Int((pct * 100).rounded())
     }
 
     var menuBarWarning: Bool {

@@ -70,6 +70,10 @@
 "General" = "General";
 "Launch at login" = "Launch at login";
 "Menu Bar" = "Menu Bar";
+"Menu bar shows" = "Menu bar shows";
+"menuBarMode.quota" = "Quota %";
+"menuBarMode.cost" = "Today's cost";
+"menuBarMode.burn" = "Burn rate";
 "Show quota as" = "Show quota as";
 "Used" = "Used";
 "menuBarHint.remaining" = "Menu bar and popover will show e.g. \"82% remaining\".";

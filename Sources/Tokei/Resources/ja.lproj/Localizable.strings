@@ -70,6 +70,10 @@
 "General" = "一般";
 "Launch at login" = "ログイン時に起動";
 "Menu Bar" = "メニューバー";
+"Menu bar shows" = "メニューバーの表示";
+"menuBarMode.quota" = "使用量 %";
+"menuBarMode.cost" = "今日のコスト";
+"menuBarMode.burn" = "消費レート";
 "Show quota as" = "使用量の表示";
 "Used" = "使用";
 "menuBarHint.remaining" = "メニューバーとポップオーバーに「残り 82%」のように表示されます。";
