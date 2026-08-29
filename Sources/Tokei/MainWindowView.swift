@@ -44,7 +44,7 @@ struct MainWindowView: View {
         } detail: {
             switch selection {
             case .overview: OverviewPane(state: state)
-            case .analytics: AnalyticsPane(usage: state.usage)
+            case .analytics: AnalyticsPane(state: state)
             case .settings: SettingsPane()
             }
         }

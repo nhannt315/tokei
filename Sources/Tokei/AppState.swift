@@ -35,6 +35,7 @@ actor UsageEngine {
         // Analytics
         var daysThisWeek: [DayPoint] = []      // tokens/day, current calendar week (7 points)
         var weeks: [WeekPoint] = []            // last 8 weeks, tokens + cost
+        var availableModels: [String] = []     // distinct non-synthetic models seen, for the filter
 
         // Session window (for burn rate), keyed off local events; the projected
         // exhaustion time comes from the quota bucket, not from these tokens.
@@ -75,8 +76,34 @@ actor UsageEngine {
             out.weeks.append(WeekPoint(weekStart: wk.weekStart, tokens: wk.totals.total, cost: cost))
         }
 
+        out.availableModels = Set(events.map(\.model))
+            .filter { !CostCalculator.isSynthetic($0) }
+            .sorted()
+
         out.unpricedModels = calc.unpricedModels
         return out
+    }
+
+    /// Filtered analytics for the pane's pickers: tokens/day and weekly
+    /// tokens+cost for one model (nil = all) over the last `days`. Reuses the
+    /// already-scanned `store.events` — no transcript re-scan — so it stays
+    /// instant even with large history. Weeks span ceil(days/7) to cover the
+    /// day range.
+    func analytics(model: String?, days: Int) -> (days: [DayPoint], weeks: [WeekPoint]) {
+        if catalog == nil { catalog = (try? pricingService.load()) ?? PricingCatalog(models: [:]) }
+        let events = model.map { m in store.events.filter { $0.model == m } } ?? store.events
+        let aggregator = UsageAggregator()
+        var calc = CostCalculator(catalog: catalog!)
+
+        let dayPoints = aggregator.lastDays(events, count: max(days, 1))
+            .map { DayPoint(day: $0.day, tokens: $0.totals.total) }
+        let weekCount = max((days + 6) / 7, 1)
+        let weekPoints = aggregator.lastWeeks(events, count: weekCount).map { wk in
+            WeekPoint(weekStart: wk.weekStart, tokens: wk.totals.total,
+                      cost: weekCost(events, weekStart: wk.weekStart,
+                                     calendar: aggregator.calendar, calc: &calc))
+        }
+        return (dayPoints, weekPoints)
     }
 
     /// Cost of one week, summed per model (pricing is model-dependent).
@@ -289,6 +316,12 @@ final class AppState {
         usage = await engine.compute()
         await applySessionTokens()
         lastRefreshed = Date()
+    }
+
+    /// Forward the Analytics pane's filter to the engine. Kept here because the
+    /// engine actor is private to AppState.
+    func analytics(model: String?, days: Int) async -> (days: [UsageEngine.DayPoint], weeks: [UsageEngine.WeekPoint]) {
+        await engine.analytics(model: model, days: days)
     }
 
     /// Poll GitHub for a newer release, at most every 6 hours. Silent on

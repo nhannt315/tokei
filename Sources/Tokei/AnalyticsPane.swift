@@ -2,13 +2,25 @@ import SwiftUI
 import Charts
 import TrackerCore
 
-/// Analytics: tokens/day for the current week, weekly cost over the last 8
-/// weeks, and a weekly rollup table. ContentUnavailableView until first usage.
+/// Analytics: tokens/day and weekly cost, filterable by model and lookback
+/// window. Charts draw from a filtered recompute (no transcript re-scan);
+/// ContentUnavailableView until first usage, and an empty state when a filter
+/// yields nothing.
 struct AnalyticsPane: View {
-    let usage: UsageEngine.Computed
+    let state: AppState
+
+    // nil = all models. Lookback in days; default 56 = the previous 8-week view.
+    @State private var selectedModel: String?
+    @State private var lookbackDays = 56
+    // nil until the first fetch lands, so an unloaded pane isn't mistaken for a
+    // genuinely-empty range (which would flash the empty state on first appear).
+    @State private var points: (days: [UsageEngine.DayPoint], weeks: [UsageEngine.WeekPoint])?
+    @State private var fetchTask: Task<Void, Never>?
+
+    private static let lookbacks = [7, 30, 56, 90]
 
     var body: some View {
-        if usage.eventCount == 0 {
+        if state.usage.eventCount == 0 {
             ContentUnavailableView {
                 Label { Text("No usage yet", bundle: .l10n) } icon: { Image(systemName: "chart.bar.xaxis") }
             } description: {
@@ -17,14 +29,55 @@ struct AnalyticsPane: View {
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    TokensPerDayChart(days: usage.daysThisWeek)
-                    HStack(alignment: .top, spacing: 16) {
-                        WeeklyCostChart(weeks: usage.weeks)
-                        WeeklyRollupTable(weeks: usage.weeks)
+                    filters
+                    if let points {
+                        if points.days.allSatisfy({ $0.tokens == 0 }) && points.weeks.allSatisfy({ $0.tokens == 0 }) {
+                            ContentUnavailableView {
+                                Label { Text("No usage in this range", bundle: .l10n) } icon: { Image(systemName: "line.diagonal") }
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 200)
+                        } else {
+                            TokensPerDayChart(days: points.days)
+                            HStack(alignment: .top, spacing: 16) {
+                                WeeklyCostChart(weeks: points.weeks)
+                                WeeklyRollupTable(weeks: points.weeks)
+                            }
+                        }
                     }
                 }
                 .padding(20)
             }
+            .task { reload() }
+            .onChange(of: selectedModel) { _, _ in reload() }
+            .onChange(of: lookbackDays) { _, _ in reload() }
+        }
+    }
+
+    private var filters: some View {
+        HStack(spacing: 12) {
+            Picker(selection: $selectedModel) {
+                Text("All models", bundle: .l10n).tag(String?.none)
+                ForEach(state.usage.availableModels, id: \.self) {
+                    Text(verbatim: RowBuilder.displayName($0)).tag(String?.some($0))
+                }
+            } label: { Text("Model", bundle: .l10n) }
+            Picker(selection: $lookbackDays) {
+                ForEach(Self.lookbacks, id: \.self) {
+                    Text(verbatim: String(localized: "\($0) days", bundle: .l10n)).tag($0)
+                }
+            } label: { Text("Range", bundle: .l10n) }
+        }
+        .frame(maxWidth: 460)
+    }
+
+    /// Cancel any in-flight fetch and load the current filter — a single Task
+    /// handle so rapid picker changes can't race stale results onto the charts.
+    private func reload() {
+        fetchTask?.cancel()
+        let model = selectedModel, days = lookbackDays
+        fetchTask = Task {
+            let result = await state.analytics(model: model, days: days)
+            if !Task.isCancelled { points = result }
         }
     }
 }

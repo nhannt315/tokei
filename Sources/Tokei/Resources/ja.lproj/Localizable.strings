@@ -65,6 +65,10 @@
 "Charts appear after your first Claude Code session is recorded." = "最初の Claude Code セッションが記録されるとグラフが表示されます。";
 "TOKENS PER DAY — THIS WEEK" = "日別トークン — 今週";
 "WEEKLY COST — LAST 8 WEEKS" = "週別コスト — 直近 8 週間";
+"All models" = "すべてのモデル";
+"Range" = "期間";
+"%lld days" = "%lld 日間";
+"No usage in this range" = "この期間の使用はありません";
 
 /* Settings */
 "General" = "一般";

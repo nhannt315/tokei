@@ -65,6 +65,10 @@
 "Charts appear after your first Claude Code session is recorded." = "Charts appear after your first Claude Code session is recorded.";
 "TOKENS PER DAY — THIS WEEK" = "TOKENS PER DAY — THIS WEEK";
 "WEEKLY COST — LAST 8 WEEKS" = "WEEKLY COST — LAST 8 WEEKS";
+"All models" = "All models";
+"Range" = "Range";
+"%lld days" = "%lld days";
+"No usage in this range" = "No usage in this range";
 
 /* Settings */
 "General" = "General";

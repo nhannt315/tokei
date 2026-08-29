@@ -406,4 +406,26 @@ check(!AlertLatch.shouldFireCost(todayDollars: 3, thresholdDollars: 10, alreadyF
 check(!AlertLatch.shouldFireCost(todayDollars: 99, thresholdDollars: 0, alreadyFired: false),
       "cost disabled at threshold 0")
 
+// MARK: - Analytics model filter (Phase 5 recompute path)
+
+print("Analytics filter")
+// The engine filters events by model, then calls the same lastDays/lastWeeks.
+// Verify that equivalence with a two-model fixture over one day.
+var fCal = Calendar(identifier: .gregorian)
+fCal.timeZone = TimeZone(identifier: "UTC")!
+let fAgg = UsageAggregator(calendar: fCal)
+let fNow = ISO8601DateFormatter().date(from: "2026-08-13T12:00:00Z")!
+func fev(_ model: String, out: Int) -> UsageEvent {
+    UsageEvent(dedupeKey: model + "\(out)", model: model,
+               timestamp: ISO8601DateFormatter().date(from: "2026-08-13T10:00:00Z")!,
+               inputTokens: 0, outputTokens: out, cacheReadTokens: 0,
+               cacheCreate5m: 0, cacheCreate1h: 0, sessionPath: "/p/s.jsonl")
+}
+let twoModel = [fev("model-a", out: 300), fev("model-b", out: 700), fev("model-a", out: 100)]
+let filteredA = twoModel.filter { $0.model == "model-a" }
+let onlyA = fAgg.lastDays(filteredA, count: 1, now: fNow)
+check(onlyA.last?.totals.total == 400, "filter model-a sums only A (300+100)")
+let merged = fAgg.lastDays(twoModel, count: 1, now: fNow)
+check(merged.last?.totals.total == 1100, "unfiltered equals merged total (300+700+100)")
+
 print("\nall \(checksRun) checks passed")
