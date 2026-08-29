@@ -78,6 +78,9 @@
 "Used" = "Used";
 "menuBarHint.remaining" = "Menu bar and popover will show e.g. \"82% remaining\".";
 "menuBarHint.used" = "Menu bar and popover will show e.g. \"82% used\".";
+"Quota refresh" = "Quota refresh";
+"%lld min" = "%lld min";
+"Usage and cost still update instantly; this only paces the network quota check." = "Usage and cost still update instantly; this only paces the network quota check.";
 "Notifications" = "Notifications";
 "Quota alerts" = "Quota alerts";
 "quotaAlerts.hint" = "Notifies when the 5-hour session reaches 70% and 90% used.";

@@ -280,7 +280,11 @@ final class AppState {
         while !Task.isCancelled {
             await refresh()
             await checkForUpdate()   // self-throttled to every 6h
-            try? await Task.sleep(for: .seconds(300))
+            // Read per-iteration so a Settings change takes effect next wake,
+            // no loop teardown. Floored at 60s inside currentSeconds.
+            let seconds = PollInterval.currentSeconds
+            assert(seconds >= 60)
+            try? await Task.sleep(for: .seconds(seconds))
         }
     }
 

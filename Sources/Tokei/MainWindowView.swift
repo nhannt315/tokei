@@ -249,6 +249,7 @@ private struct BreakdownTable: View {
 struct SettingsPane: View {
     @AppStorage(PercentageMode.defaultsKey) private var mode = PercentageMode.remaining.rawValue
     @AppStorage(MenuBarMode.defaultsKey) private var menuBarMode = MenuBarMode.quota.rawValue
+    @AppStorage(PollInterval.defaultsKey) private var pollSeconds = PollInterval.fiveMin.rawValue
     @AppStorage("quotaAlertsEnabled") private var alertsEnabled = true
     @AppStorage(AppearanceMode.defaultsKey) private var appearance = AppearanceMode.system.rawValue
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -287,6 +288,14 @@ struct SettingsPane: View {
                      ? loc("menuBarHint.remaining") : loc("menuBarHint.used"))
                     .font(.caption).foregroundStyle(.secondary)
             } header: { Text("Menu Bar", bundle: .l10n) }
+            Section {
+                Picker(selection: $pollSeconds) {
+                    ForEach(PollInterval.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }
+                } label: { Text("Quota refresh", bundle: .l10n) }
+                .pickerStyle(.segmented)
+                Text("Usage and cost still update instantly; this only paces the network quota check.", bundle: .l10n)
+                    .font(.caption).foregroundStyle(.secondary)
+            } header: { Text("Refresh", bundle: .l10n) }
             Section {
                 Picker(selection: $appearance) {
                     ForEach(AppearanceMode.allCases, id: \.rawValue) { Text($0.label).tag($0.rawValue) }

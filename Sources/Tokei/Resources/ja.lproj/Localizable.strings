@@ -78,6 +78,9 @@
 "Used" = "使用";
 "menuBarHint.remaining" = "メニューバーとポップオーバーに「残り 82%」のように表示されます。";
 "menuBarHint.used" = "メニューバーとポップオーバーに「使用 82%」のように表示されます。";
+"Quota refresh" = "使用量の更新間隔";
+"%lld min" = "%lld 分";
+"Usage and cost still update instantly; this only paces the network quota check." = "使用量とコストは常に即時更新されます。これはネットワーク経由の使用量取得の間隔のみを調整します。";
 "Notifications" = "通知";
 "Quota alerts" = "使用量アラート";
 "quotaAlerts.hint" = "5時間セッションの使用量が 70% と 90% に達したときに通知します。";
