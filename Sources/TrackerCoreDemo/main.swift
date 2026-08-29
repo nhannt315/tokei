@@ -381,4 +381,29 @@ if let projected = bucket.projectedLimit(windowStart: ws, now: midNow) {
 check(QuotaBucket(key: "x", utilization: 0, resetsAt: nil).projectedLimit(windowStart: ws, now: midNow) == nil,
       "projectedLimit nil when idle")
 
+// MARK: - AlertLatch
+
+print("AlertLatch")
+// Quota: fires below threshold when not latched; not while latched; off at 0.
+check(AlertLatch.shouldFireQuota(remainingPct: 15, thresholdPct: 20, alreadyFired: false),
+      "quota fires below threshold when not latched")
+check(!AlertLatch.shouldFireQuota(remainingPct: 15, thresholdPct: 20, alreadyFired: true),
+      "quota does not refire while latched")
+check(!AlertLatch.shouldFireQuota(remainingPct: 25, thresholdPct: 20, alreadyFired: false),
+      "quota does not fire above threshold")
+check(!AlertLatch.shouldFireQuota(remainingPct: 5, thresholdPct: 0, alreadyFired: false),
+      "quota disabled at threshold 0")
+// Reset clears the latch → can fire again (simulated by alreadyFired flipping to false).
+check(AlertLatch.shouldFireQuota(remainingPct: 15, thresholdPct: 20, alreadyFired: false),
+      "quota re-arms after reset clears the latch")
+// Cost: fires at/above threshold when not latched; not while latched; off at 0.
+check(AlertLatch.shouldFireCost(todayDollars: 10, thresholdDollars: 10, alreadyFired: false),
+      "cost fires at threshold when not latched")
+check(!AlertLatch.shouldFireCost(todayDollars: 12, thresholdDollars: 10, alreadyFired: true),
+      "cost does not refire while latched")
+check(!AlertLatch.shouldFireCost(todayDollars: 3, thresholdDollars: 10, alreadyFired: false),
+      "cost does not fire below threshold")
+check(!AlertLatch.shouldFireCost(todayDollars: 99, thresholdDollars: 0, alreadyFired: false),
+      "cost disabled at threshold 0")
+
 print("\nall \(checksRun) checks passed")

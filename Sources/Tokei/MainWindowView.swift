@@ -251,6 +251,8 @@ struct SettingsPane: View {
     @AppStorage(MenuBarMode.defaultsKey) private var menuBarMode = MenuBarMode.quota.rawValue
     @AppStorage(PollInterval.defaultsKey) private var pollSeconds = PollInterval.fiveMin.rawValue
     @AppStorage("quotaAlertsEnabled") private var alertsEnabled = true
+    @AppStorage("quotaAlertRemainingPct") private var quotaAlertPct = 20.0
+    @AppStorage("dailyCostAlertDollars") private var dailyCostAlert = 0.0
     @AppStorage(AppearanceMode.defaultsKey) private var appearance = AppearanceMode.system.rawValue
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var loginError: String?
@@ -307,8 +309,22 @@ struct SettingsPane: View {
             } header: { Text("Appearance", bundle: .l10n) }
             Section {
                 Toggle(isOn: $alertsEnabled) { Text("Quota alerts", bundle: .l10n) }
-                Text(verbatim: loc("quotaAlerts.hint"))
-                    .font(.caption).foregroundStyle(.secondary)
+                if alertsEnabled {
+                    Stepper(value: $quotaAlertPct, in: 0...90, step: 5) {
+                        Text(verbatim: quotaAlertPct <= 0
+                             ? loc("quotaAlert.off")
+                             : String(localized: "quotaAlert.threshold \(Int(quotaAlertPct))", bundle: .l10n))
+                    }
+                    Text(verbatim: loc("quotaAlerts.hint"))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Stepper(value: $dailyCostAlert, in: 0...1000, step: 5) {
+                        Text(verbatim: dailyCostAlert <= 0
+                             ? loc("costAlert.off")
+                             : String(localized: "costAlert.threshold \(costString(Decimal(dailyCostAlert)))", bundle: .l10n))
+                    }
+                    Text("Daily-cost alert is off at $0.", bundle: .l10n)
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             } header: { Text("Notifications", bundle: .l10n) }
         }
         .formStyle(.grouped)

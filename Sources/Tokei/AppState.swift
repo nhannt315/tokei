@@ -163,6 +163,18 @@ final class AppState {
     private var sessionResetsAt: Date?
     private var lastUpdateCheck: Date?
 
+    // Alert latches: fire once per reset boundary. Quota latch clears when the
+    // session window resets (applySessionTokens); cost latch clears at midnight
+    // (the .NSCalendarDayChanged observer).
+    private let notifier = AlertNotifier()
+    private var quotaAlertFired = false
+    private var costAlertFired = false
+    // Previous session utilization, to detect a window roll (utilization drops
+    // when a fresh window opens). Re-arming off the *observed* server reading —
+    // not the local clock passing the old resetsAt — avoids refiring under clock
+    // skew or a server that still reports the expired window.
+    private var lastQuotaUtilization: Double?
+
     /// Version stamped into the bundle by scripts/bundle.sh.
     static var currentVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
@@ -184,7 +196,10 @@ final class AppState {
         // Midnight rollover: "today" must recompute even with no file activity.
         NotificationCenter.default.addObserver(forName: .NSCalendarDayChanged,
                                                object: nil, queue: .main) { _ in
-            Task { @MainActor [weak self] in await self?.refreshUsage() }
+            Task { @MainActor [weak self] in
+                self?.costAlertFired = false   // new day → re-arm the cost alert
+                await self?.refreshUsage()
+            }
         }
     }
 
@@ -198,6 +213,50 @@ final class AppState {
             await fillSessionWindow(snapshot)
         }
         quota = state
+        await evaluateAlerts()
+    }
+
+    /// Fire quota/cost notifications on threshold crossings, latched so a datum
+    /// that stays past the threshold across polls only notifies once. Gated by
+    /// the shared enable toggle; thresholds live in UserDefaults. Called at the
+    /// end of refresh, when both quota and usage are current.
+    private func evaluateAlerts() async {
+        guard UserDefaults.standard.object(forKey: "quotaAlertsEnabled") == nil
+                || UserDefaults.standard.bool(forKey: "quotaAlertsEnabled") else { return }
+
+        // Quota-remaining alert (default threshold 20%, 0 = off).
+        let d = UserDefaults.standard
+        let quotaThreshold = d.object(forKey: "quotaAlertRemainingPct") == nil
+            ? 20.0 : d.double(forKey: "quotaAlertRemainingPct")
+        if case .available(let snapshot) = quota, let session = snapshot.sessionBucket {
+            // Window roll: a fresh window opens with lower utilization. Re-arm off
+            // this observed drop rather than the local clock, so a skewed clock or
+            // a lagging server can't clear the latch while the old window still
+            // reads full. (0.05 tolerance ignores normal within-window jitter.)
+            if let last = lastQuotaUtilization, session.utilization < last - 0.05 {
+                quotaAlertFired = false
+            }
+            lastQuotaUtilization = session.utilization
+
+            let remainingPct = (1 - session.utilization) * 100
+            if AlertLatch.shouldFireQuota(remainingPct: remainingPct, thresholdPct: quotaThreshold,
+                                          alreadyFired: quotaAlertFired) {
+                quotaAlertFired = true
+                await notifier.notify(title: loc("alert.quota.title"),
+                                      body: String(localized: "alert.quota.body \(Int(remainingPct.rounded()))",
+                                                   bundle: .l10n))
+            }
+        }
+
+        // Daily-cost alert (default 0 = off).
+        let costThreshold = Decimal(d.double(forKey: "dailyCostAlertDollars"))
+        if AlertLatch.shouldFireCost(todayDollars: usage.todayTotal, thresholdDollars: costThreshold,
+                                     alreadyFired: costAlertFired) {
+            costAlertFired = true
+            await notifier.notify(title: loc("alert.cost.title"),
+                                  body: String(localized: "alert.cost.body \(costString(usage.todayTotal))",
+                                               bundle: .l10n))
+        }
     }
 
     /// Once quota is known, record the 5h session window so later local-only

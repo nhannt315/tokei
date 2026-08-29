@@ -83,7 +83,16 @@
 "Usage and cost still update instantly; this only paces the network quota check." = "Usage and cost still update instantly; this only paces the network quota check.";
 "Notifications" = "Notifications";
 "Quota alerts" = "Quota alerts";
-"quotaAlerts.hint" = "Notifies when the 5-hour session reaches 70% and 90% used.";
+"quotaAlerts.hint" = "Notifies once when session quota drops below the threshold; re-arms when the window resets.";
+"quotaAlert.threshold %lld" = "Alert below %lld%% remaining";
+"quotaAlert.off" = "Quota alert off";
+"costAlert.threshold %@" = "Alert above %@ today";
+"costAlert.off" = "Daily-cost alert off";
+"Daily-cost alert is off at $0." = "Daily-cost alert is off at $0.";
+"alert.quota.title" = "Session quota running low";
+"alert.quota.body %lld" = "Only %lld%% of your session quota remains.";
+"alert.cost.title" = "Daily cost threshold reached";
+"alert.cost.body %@" = "Today's Claude Code cost is %@.";
 "Appearance" = "Appearance";
 "System" = "System";
 "Light" = "Light";
