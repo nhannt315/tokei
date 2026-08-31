@@ -26,8 +26,11 @@ final class AlertNotifier {
     /// prompt. Returns whether we may post.
     private func ensureAuthorized() async -> Bool {
         if let authorized { return authorized }
-        let settings = await center.notificationSettings()
-        switch settings.authorizationStatus {
+        // Read only the Sendable status: UNNotificationSettings itself is
+        // non-Sendable and cannot cross the await boundary under strict
+        // concurrency (release builds).
+        let status = await currentAuthorizationStatus()
+        switch status {
         case .authorized, .provisional:
             authorized = true
         case .denied:
@@ -36,5 +39,13 @@ final class AlertNotifier {
             authorized = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
         }
         return authorized!
+    }
+
+    /// Fetch just the authorization status via the completion-handler API, so
+    /// the non-Sendable UNNotificationSettings never escapes this call.
+    private func currentAuthorizationStatus() async -> UNAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            center.getNotificationSettings { continuation.resume(returning: $0.authorizationStatus) }
+        }
     }
 }
